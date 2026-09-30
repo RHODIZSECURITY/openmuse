@@ -40,9 +40,10 @@ export async function createApp(
   const browser = new BrowserService(db, config, auth, files);
   const computer = new ComputerService(db, config, options.docker);
   const agent = new AgentService(db, config, workspace, files, actions, browser, computer);
-  const intelligence = config.intelligenceApiKey
-    ? new CopilotKitIntelligence({ apiKey: config.intelligenceApiKey })
-    : undefined;
+  const intelligence =
+    config.authBackend !== "rhodiz" && config.intelligenceApiKey
+      ? new CopilotKitIntelligence({ apiKey: config.intelligenceApiKey })
+      : undefined;
   const runtime = makeRuntime(config, agent, auth, intelligence);
   const app = new Hono<{ Variables: { owner: string } }>();
   const origins = new Set([...config.allowedOrigins, new URL(config.publicUrl).origin]);
@@ -205,6 +206,8 @@ export async function createApp(
     );
   });
   app.get("/api/main-thread", async (c) => {
+    if (config.authBackend === "rhodiz")
+      return c.json({ threadId: "local-main", existing: true, canonical: "rhodiz" });
     const owner = c.get("owner");
     await db.insertIfAbsent(owner, "conversation-settings", {
       id: "main",
@@ -229,10 +232,51 @@ export async function createApp(
     }
     return c.json({ threadId: main.threadId, existing: Boolean(intelligence) });
   });
-  app.get("/api/conversation", async (c) =>
-    c.json((await db.get(c.get("owner"), "conversations", "default")) ?? { messages: [] }),
-  );
+  app.get("/api/conversation", async (c) => {
+    if (config.authBackend === "rhodiz") {
+      const authorization = c.req.header("authorization");
+      const baseUrl = config.rhodizApiUrl;
+      if (!authorization || !baseUrl)
+        throw new AppError("RHODIZ conversation history is not configured", 503);
+      const threadId = c.req.query("threadId") ?? "local-main";
+      if (!threadId || threadId.length > 256)
+        throw new AppError("Conversation thread is invalid", 422);
+      let response: Response;
+      try {
+        response = await fetch(
+          `${baseUrl}/api/rhodiz/openmuse/conversation?threadId=${encodeURIComponent(threadId)}`,
+          {
+            headers: { Authorization: authorization },
+            signal: AbortSignal.timeout(5000),
+          },
+        );
+      } catch {
+        throw new AppError("RHODIZ conversation history is unavailable", 503);
+      }
+      let payload: unknown;
+      try {
+        payload = await response.json();
+      } catch {
+        payload = null;
+      }
+      if (!response.ok) {
+        if (response.status === 401)
+          throw new AppError("RHODIZ session expired. Sign in again.", 401);
+        throw new AppError("RHODIZ conversation history is unavailable", 502);
+      }
+      const parsed = z
+        .object({ messages: z.array(z.unknown()).max(1000) })
+        .parse(payload);
+      for (const message of parsed.messages) MessageSchema.parse(message);
+      return c.json({ messages: parsed.messages, canonical: "rhodiz" });
+    }
+    return c.json(
+      (await db.get(c.get("owner"), "conversations", "default")) ?? { messages: [] },
+    );
+  });
   app.put("/api/conversation", async (c) => {
+    if (config.authBackend === "rhodiz")
+      return c.json({ ok: true, canonical: "rhodiz", localWrite: false });
     const body = await c.req.json();
     const messages = z.array(z.unknown()).max(1000).parse(body.messages);
     for (const message of messages) MessageSchema.parse(message);
