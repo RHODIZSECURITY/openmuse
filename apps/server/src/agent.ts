@@ -11,6 +11,12 @@ import type { Config } from "./config.ts";
 import { ConversationAgent } from "./engine/conversation.ts";
 import type { AgentService } from "./engine/service.ts";
 
+export function aguiHeaders(config: Config, authorization?: string) {
+  if (config.authBackend === "rhodiz")
+    return authorization ? { Authorization: authorization } : {};
+  return config.agentToken ? { Authorization: `Bearer ${config.agentToken}` } : {};
+}
+
 export function agentConfigured(config: Config) {
   return (
     config.agentBackend === "sample" ||
@@ -40,12 +46,7 @@ export function makeRuntime(
           : config.agentBackend === "agui"
             ? new HttpAgent({
                 url: config.agentUrl ?? "http://127.0.0.1:1/unconfigured",
-                headers:
-                  config.authBackend === "rhodiz" && authorization
-                    ? { Authorization: authorization }
-                    : config.agentToken
-                      ? { Authorization: `Bearer ${config.agentToken}` }
-                      : {},
+                headers: aguiHeaders(config, authorization),
               })
             : new ConversationAgent(config, service, owner),
     };
