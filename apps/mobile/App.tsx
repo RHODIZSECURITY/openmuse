@@ -166,8 +166,8 @@ export default function App() {
                       Open RHODIZ
                     </Button>
                     <Text style={[s.small, { marginTop: 15 }]}>
-                      Authentication and identity are validated by your RHODIZ server. OpenMuse
-                      does not become a second identity authority.
+                      Authentication and identity are validated by your RHODIZ server. OpenMuse does
+                      not become a second identity authority.
                     </Text>
                   </>
                 ) : (
@@ -186,8 +186,8 @@ export default function App() {
                       Open workspace
                     </Button>
                     <Text style={[s.small, { marginTop: 15 }]}>
-                      Local workspaces open without a key. Make sure your OpenMuse server is
-                      running at {API_URL}.
+                      Local workspaces open without a key. Make sure your OpenMuse server is running
+                      at {API_URL}.
                     </Text>
                   </>
                 )}
