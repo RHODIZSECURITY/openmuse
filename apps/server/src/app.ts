@@ -198,7 +198,7 @@ export async function createApp(
     c.header("Content-Type", "image/png");
     c.header("Content-Length", String(bytes.byteLength));
     c.header("Cache-Control", "no-store");
-    return c.body(bytes);
+    return c.body(Uint8Array.from(bytes));
   });
   app.route("/api/computer", computerRoutes(computer, files));
   app.get("/api/calendars", async (c) => c.json(await workspace.calendars(c.get("owner"))));
