@@ -189,3 +189,32 @@ test("RHODIZ conversation history stays canonical and local conversation writes 
   }
 });
 
+test("RHODIZ history proxy rejects a response without the canonical marker", async (t) => {
+  const db = await createStore();
+  try {
+    t.mock.method(globalThis, "fetch", async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "http://rhodiz.internal/api/rhodiz/sesion")
+        return Response.json({
+          user_id: "owner-1",
+          usuario: "richard",
+          rol: "admin",
+        });
+      if (url === "http://rhodiz.internal/api/rhodiz/openmuse/conversation?threadId=local-main")
+        return Response.json({
+          threadId: "local-main",
+          canonical: "foreign",
+          messages: [{ id: "m1", role: "assistant", content: "untrusted history" }],
+        });
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+
+    const server = await createApp(db, base);
+    const response = await server.app.request("/api/conversation", {
+      headers: { Authorization: "Bearer canonical-bearer" },
+    });
+    assert.equal(response.status, 422);
+  } finally {
+    await db.close();
+  }
+});
