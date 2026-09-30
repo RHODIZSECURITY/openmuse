@@ -147,10 +147,7 @@ export async function createApp(
         ? auth.verify(new URL(c.req.url))
         : await auth.owner(c.req.header("authorization"));
     c.set("owner", owner);
-    if (
-      config.authBackend === "rhodiz" &&
-      /^\/api\/(?:browsers|computer)(?:\/|$)/.test(c.req.path)
-    )
+    if (config.authBackend === "rhodiz" && /^\/api\/(?:browsers|computer)(?:\/|$)/.test(c.req.path))
       throw new AppError(
         "OpenMuse local Computer/browser effects are disabled in RHODIZ mode. RHODIZ Action Fabric remains authoritative.",
         409,
@@ -167,7 +164,11 @@ export async function createApp(
       const connection = snapshot.connections.find((item) => item.id === "browser");
       if (connection) {
         connection.status =
-          state === "connected" ? "connected" : state === "disabled" ? "unconfigured" : "disconnected";
+          state === "connected"
+            ? "connected"
+            : state === "disabled"
+              ? "unconfigured"
+              : "disconnected";
         connection.capabilities = [
           "RHODIZ browser_agent",
           "RHODIZ Policy / Action Fabric",
