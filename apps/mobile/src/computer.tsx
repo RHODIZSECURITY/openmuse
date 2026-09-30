@@ -65,7 +65,8 @@ export function ComputerEntry() {
   );
 }
 export function BrowserThreadCard({ browser }: { browser: BrowserSession }) {
-  const { open } = useWorkspace();
+  const { open, workspace, api } = useWorkspace();
+  const sovereign = workspace.runtime.browserBackend === "rhodiz";
   const [failed, setFailed] = useState(false);
   useEffect(() => {
     setFailed(false);
@@ -92,7 +93,10 @@ export function BrowserThreadCard({ browser }: { browser: BrowserSession }) {
       {browser.previewUrl && browser.status === "active" && !failed ? (
         <Image
           accessibilityLabel={`Browser preview: ${browser.title}`}
-          source={{ uri: browser.previewUrl }}
+          source={{
+            uri: api.url(browser.previewUrl),
+            ...(sovereign ? { headers: { Authorization: `Bearer ${api.token}` } } : {}),
+          }}
           style={{ width: "100%", aspectRatio: 1.6, borderRadius: 11, backgroundColor: "#FFF" }}
           resizeMode="contain"
           onError={() => setFailed(true)}
@@ -113,12 +117,19 @@ export function BrowserThreadCard({ browser }: { browser: BrowserSession }) {
           </Text>
         </View>
       )}
-      <Button onPress={() => open({ type: "browser", browser })}>
-        {browser.status === "closed"
-          ? "Reopen browser"
-          : browser.status === "error"
-            ? "Reconnect browser"
-            : "Take control"}
+      <Button
+        disabled={sovereign}
+        onPress={() => {
+          if (!sovereign) open({ type: "browser", browser });
+        }}
+      >
+        {sovereign
+          ? "Read-only RHODIZ preview"
+          : browser.status === "closed"
+            ? "Reopen browser"
+            : browser.status === "error"
+              ? "Reconnect browser"
+              : "Take control"}
       </Button>
     </Card>
   );
