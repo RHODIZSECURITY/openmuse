@@ -122,12 +122,21 @@ test("RHODIZ conversation history stays canonical and local conversation writes 
           ],
         });
       }
+      if (url === "http://rhodiz.internal/api/rhodiz/computer/estado") {
+        const requestHeaders = new Headers(init?.headers);
+        assert.equal(requestHeaders.get("x-rhodiz-token"), "canonical-bearer");
+        assert.equal(requestHeaders.get("authorization"), null);
+        return Response.json({ configurado: true, disponible: true });
+      }
       throw new Error(`unexpected fetch: ${url}`);
     });
 
     const server = await createApp(db, {
       ...base,
       intelligenceApiKey: "configured-but-must-not-own-history",
+      workerUrl: "http://openmuse-worker.invalid",
+      workerToken: "must-never-be-used-in-rhodiz-mode",
+      computerEnabled: true,
     });
     const headers = {
       Authorization: "Bearer canonical-bearer",
@@ -167,6 +176,24 @@ test("RHODIZ conversation history stays canonical and local conversation writes 
     const snapshot = await workspace.json();
     assert.equal(snapshot.runtime.richThreads, false);
     assert.equal(snapshot.runtime.conversationStore, "rhodiz");
+    assert.equal(snapshot.runtime.browserBackend, "rhodiz");
+    assert.equal(snapshot.runtime.browserStatus, "connected");
+    assert.deepEqual(snapshot.browsers, []);
+    const browserConnection = snapshot.connections.find(
+      (connection: { id: string }) => connection.id === "browser",
+    );
+    assert.equal(browserConnection?.status, "connected");
+    assert.ok(browserConnection?.capabilities.includes("RHODIZ Policy / Action Fabric"));
+
+    const localBrowser = await server.app.request("/api/browsers", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ url: "https://example.com" }),
+    });
+    assert.equal(localBrowser.status, 409);
+
+    const localComputer = await server.app.request("/api/computer/status", { headers });
+    assert.equal(localComputer.status, 409);
 
     const main = await server.app.request("/api/main-thread", { headers });
     assert.equal(main.status, 200);
@@ -179,6 +206,8 @@ test("RHODIZ conversation history stays canonical and local conversation writes 
     assert.ok(
       calls.includes("http://rhodiz.internal/api/rhodiz/openmuse/conversation?threadId=local-main"),
     );
+    assert.ok(calls.includes("http://rhodiz.internal/api/rhodiz/computer/estado"));
+    assert.ok(!calls.some((url) => url.startsWith("http://openmuse-worker.invalid")));
   } finally {
     await db.close();
   }
