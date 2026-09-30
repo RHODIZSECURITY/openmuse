@@ -323,7 +323,14 @@ export class WorkspaceService {
         provider: this.config.agentBackend === "sample" ? "sample" : "model",
         configured: agentConfigured(this.config),
         openbotConfigured: false,
-        richThreads: Boolean(this.config.intelligenceApiKey),
+        richThreads:
+          this.config.authBackend !== "rhodiz" && Boolean(this.config.intelligenceApiKey),
+        conversationStore:
+          this.config.authBackend === "rhodiz"
+            ? "rhodiz"
+            : this.config.intelligenceApiKey
+              ? "intelligence"
+              : "local",
       },
     };
   }
