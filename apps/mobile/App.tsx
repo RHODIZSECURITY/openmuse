@@ -32,7 +32,7 @@ import {
   IdeasScreen,
 } from "./src/agent-ui";
 import { AgentWorkspaceProvider, useAgentWorkspace } from "./src/agent-workspace";
-import { API_URL, createSession, MuseApi } from "./src/api";
+import { API_URL, createSession, MuseApi, serverInfo, type SessionCredentials } from "./src/api";
 import { ChatScreen, WorkspaceTools } from "./src/chat";
 import { ComputerEntry } from "./src/computer";
 import { ComputerDraftProvider } from "./src/computer-drafts";
@@ -68,14 +68,17 @@ const titles: Partial<Record<Section, { title: string; subtitle: string }>> = {
 };
 export default function App() {
   const [token, setToken] = useState("");
+  const [authBackend, setAuthBackend] = useState<"local" | "rhodiz">("local");
   const [accessKey, setAccessKey] = useState("");
+  const [usuario, setUsuario] = useState("");
+  const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState("");
-  const connect = useCallback(async (key?: string) => {
+  const connect = useCallback(async (credentials: SessionCredentials = {}) => {
     setBusy(true);
     setError("");
     try {
-      const session = await createSession(key);
+      const session = await createSession(credentials);
       setToken(session.token);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -84,7 +87,22 @@ export default function App() {
     }
   }, []);
   useEffect(() => {
-    void connect();
+    let active = true;
+    void serverInfo()
+      .then((info) => {
+        if (!active) return;
+        setAuthBackend(info.authBackend);
+        if (info.authBackend === "local") void connect();
+        else setBusy(false);
+      })
+      .catch((e) => {
+        if (!active) return;
+        setError(e instanceof Error ? e.message : String(e));
+        setBusy(false);
+      });
+    return () => {
+      active = false;
+    };
   }, [connect]);
   return (
     <SafeAreaProvider>
@@ -111,28 +129,68 @@ export default function App() {
             <Text
               style={{ fontSize: 32, color: colors.text, letterSpacing: -1, fontWeight: "500" }}
             >
-              Welcome to OpenMuse.
+              {authBackend === "rhodiz" ? "Welcome to RHODIZ." : "Welcome to OpenMuse."}
             </Text>
-            <Text style={[s.muted, { textAlign: "center" }]}>A little room for your day.</Text>
+            <Text style={[s.muted, { textAlign: "center" }]}>
+              {authBackend === "rhodiz"
+                ? "One RHODIZ identity, memory and policy across your workspace."
+                : "A little room for your day."}
+            </Text>
             {busy ? (
               <ActivityIndicator color={colors.blueDark} />
             ) : (
               <Card style={{ width: "100%" }}>
                 <ErrorNotice error={error} />
-                <Field
-                  label="Workspace access key"
-                  value={accessKey}
-                  onChangeText={setAccessKey}
-                  secureTextEntry
-                  placeholder="Required for a live workspace"
-                />
-                <Button primary onPress={() => void connect(accessKey || undefined)}>
-                  Open workspace
-                </Button>
-                <Text style={[s.small, { marginTop: 15 }]}>
-                  Local workspaces open without a key. Make sure your OpenMuse server is running at{" "}
-                  {API_URL}.
-                </Text>
+                {authBackend === "rhodiz" ? (
+                  <>
+                    <Field
+                      label="RHODIZ username"
+                      value={usuario}
+                      onChangeText={setUsuario}
+                      autoCapitalize="none"
+                      placeholder="Your RHODIZ account"
+                    />
+                    <Field
+                      label="RHODIZ password"
+                      value={password}
+                      onChangeText={setPassword}
+                      secureTextEntry
+                      placeholder="Your RHODIZ password"
+                    />
+                    <Button
+                      primary
+                      onPress={() =>
+                        void connect({ usuario, password, dispositivo: "OpenMuse RHODIZ shell" })
+                      }
+                    >
+                      Open RHODIZ
+                    </Button>
+                    <Text style={[s.small, { marginTop: 15 }]}>
+                      Authentication and identity are validated by your RHODIZ server. OpenMuse
+                      does not become a second identity authority.
+                    </Text>
+                  </>
+                ) : (
+                  <>
+                    <Field
+                      label="Workspace access key"
+                      value={accessKey}
+                      onChangeText={setAccessKey}
+                      secureTextEntry
+                      placeholder="Required for a live workspace"
+                    />
+                    <Button
+                      primary
+                      onPress={() => void connect({ accessKey: accessKey || undefined })}
+                    >
+                      Open workspace
+                    </Button>
+                    <Text style={[s.small, { marginTop: 15 }]}>
+                      Local workspaces open without a key. Make sure your OpenMuse server is
+                      running at {API_URL}.
+                    </Text>
+                  </>
+                )}
               </Card>
             )}
           </View>
