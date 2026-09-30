@@ -1755,23 +1755,25 @@ export function AppsScreen() {
           ))}
       </Card>
       <Button onPress={() => setSettings(!settings)}>
-        {settings ? "Close agent settings" : rhodizAuthority ? "RHODIZ identity & memory" : "Personality & memory"}
+        {settings
+          ? "Close agent settings"
+          : rhodizAuthority
+            ? "RHODIZ identity & memory"
+            : "Personality & memory"}
       </Button>
       {settings && (
         <>
           <Card style={{ gap: 10 }}>
             <SectionHeading title={rhodizAuthority ? "RHODIZ identity" : "Your agent"} />
             {rhodizAuthority ? (
-              <>
-                <View style={{ alignItems: "center", gap: 10, paddingVertical: 6 }}>
-                  <Mascot size={70} variant={data?.identity.avatar || "sky"} />
-                  <Text style={s.heading}>{data?.identity.name || "RHODIZ IA"}</Text>
-                  <Text style={[s.muted, { textAlign: "center" }]}>
-                    Identity is owned by RHODIZ. OpenMuse can present it, but cannot rename or
-                    replace the canonical assistant.
-                  </Text>
-                </View>
-              </>
+              <View style={{ alignItems: "center", gap: 10, paddingVertical: 6 }}>
+                <Mascot size={70} variant={data?.identity.avatar || "sky"} />
+                <Text style={s.heading}>{data?.identity.name || "RHODIZ IA"}</Text>
+                <Text style={[s.muted, { textAlign: "center" }]}>
+                  Identity is owned by RHODIZ. OpenMuse can present it, but cannot rename or
+                  replace the canonical assistant.
+                </Text>
+              </View>
             ) : (
               <>
                 <View style={[s.row, { gap: 16, justifyContent: "center", marginBottom: 12 }]}>
