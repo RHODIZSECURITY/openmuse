@@ -7,11 +7,7 @@ import type {
   AgentNotification,
 } from "../../../../packages/domain/src/agent.ts";
 import { AppError } from "../errors.ts";
-import {
-  rhodizCreateMemory,
-  rhodizExperienceProjection,
-  rhodizForgetMemory,
-} from "../rhodiz.ts";
+import { rhodizCreateMemory, rhodizExperienceProjection, rhodizForgetMemory } from "../rhodiz.ts";
 import type { AgentService } from "./service.ts";
 
 const text = z.string().trim().min(1).max(4000);
@@ -133,7 +129,10 @@ export function agentRoutes(service: AgentService): Hono<{ Variables: { owner: s
   app.post("/memories/:id", async (c) => {
     const body = memorySchema.parse(await c.req.json());
     if (service.config.authBackend === "rhodiz")
-      throw new AppError("Edit this memory in RHODIZ MemoryOS; in-place correction is not exposed here.", 409);
+      throw new AppError(
+        "Edit this memory in RHODIZ MemoryOS; in-place correction is not exposed here.",
+        409,
+      );
     const memory = await service.db.compareAndSwap<AgentMemory>(
       c.get("owner"),
       "memories",
@@ -170,7 +169,10 @@ export function agentRoutes(service: AgentService): Hono<{ Variables: { owner: s
       })
       .parse(await c.req.json());
     if (service.config.authBackend === "rhodiz")
-      throw new AppError("RHODIZ IA identity is canonical and cannot be replaced by OpenMuse.", 409);
+      throw new AppError(
+        "RHODIZ IA identity is canonical and cannot be replaced by OpenMuse.",
+        409,
+      );
     const owner = c.get("owner");
     await service.ensure(owner);
     const identity = await service.db.compareAndSwap<AgentIdentity>(
