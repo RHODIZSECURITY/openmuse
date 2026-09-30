@@ -35,7 +35,11 @@ test("RHODIZ browser status distinguishes offline, disabled and forbidden", asyn
     Response.json({ detail: "not mounted" }, { status: 404 }),
     Response.json({ detail: "admin required" }, { status: 403 }),
   ];
-  t.mock.method(globalThis, "fetch", async () => responses.shift()!);
+  t.mock.method(globalThis, "fetch", async () => {
+    const response = responses.shift();
+    assert.ok(response);
+    return response;
+  });
 
   assert.equal(await rhodizBrowserState(config, "Bearer canonical-bearer"), "offline");
   assert.equal(await rhodizBrowserState(config, "Bearer canonical-bearer"), "disabled");
