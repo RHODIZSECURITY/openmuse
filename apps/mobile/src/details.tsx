@@ -847,6 +847,7 @@ function BrowserDetail({ initial }: { initial: BrowserSession }) {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [retry, setRetry] = useState(0);
+  const [pendingNavigation, setPendingNavigation] = useState<{ ticket: string; url: string }>();
   const sovereign = w.runtime.browserBackend === "rhodiz";
   const latest = w.browsers.find((b) => b.id === initial.id);
   const browser = {
@@ -924,6 +925,49 @@ function BrowserDetail({ initial }: { initial: BrowserSession }) {
       setBusy(false);
     }
   }
+  async function navigateRhodiz(ticket?: string) {
+    if (busy || !url.trim()) return;
+    setBusy(true);
+    setError("");
+    try {
+      const normalized = browserAddress(url);
+      const result = await api.request<
+        | BrowserSession
+        | { confirmacion_requerida: true; ticket: string; accion: string }
+      >(`/api/rhodiz-browser/${browser.id}/navigate`, {
+        url: normalized,
+        ...(ticket ? { ticket } : {}),
+      });
+      if ("confirmacion_requerida" in result) {
+        setPendingNavigation({ ticket: result.ticket, url: normalized });
+        return;
+      }
+      setPendingNavigation(undefined);
+      setLocal(result);
+      setUrl(result.url);
+      await refresh();
+    } catch (e) {
+      setPendingNavigation(undefined);
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function closeRhodiz() {
+    if (busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      await api.request(`/api/rhodiz-browser/${browser.id}/close`, {});
+      await refresh();
+      close();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   if (sovereign)
     return (
       <Sheet
@@ -932,6 +976,49 @@ function BrowserDetail({ initial }: { initial: BrowserSession }) {
         onClose={close}
         wide
       >
+        <View style={[s.row, { gap: 10, marginBottom: 16 }]}>
+          <View style={{ flex: 1 }}>
+            <Field
+              label="Website address"
+              value={url}
+              onChangeText={(value) => {
+                setUrl(value);
+                if (pendingNavigation && value !== pendingNavigation.url)
+                  setPendingNavigation(undefined);
+              }}
+              autoCapitalize="none"
+              keyboardType="url"
+              onSubmitEditing={() => void navigateRhodiz()}
+            />
+          </View>
+          <Button
+            primary
+            busy={busy}
+            disabled={!url.trim()}
+            onPress={() => void navigateRhodiz()}
+          >
+            Go
+          </Button>
+        </View>
+        {pendingNavigation && (
+          <Card style={{ backgroundColor: colors.lavender, gap: 10, marginBottom: 16 }}>
+            <Text style={s.heading}>Confirm RHODIZ navigation</Text>
+            <Text style={s.muted}>
+              RHODIZ Action Fabric requires explicit confirmation before navigating this browser
+              session to the requested address.
+            </Text>
+            <Button
+              primary
+              busy={busy}
+              onPress={() => void navigateRhodiz(pendingNavigation.ticket)}
+            >
+              Confirm navigation
+            </Button>
+            <Button small onPress={() => setPendingNavigation(undefined)}>
+              Cancel
+            </Button>
+          </Card>
+        )}
         <ErrorNotice error={error} />
         {browser.previewUrl ? (
           <Image
@@ -950,19 +1037,24 @@ function BrowserDetail({ initial }: { initial: BrowserSession }) {
           />
         )}
         <Text style={[s.small, { marginTop: 18 }]}>
-          OpenMuse is read-only for canonical RHODIZ browser sessions. Navigation, takeover,
-          downloads and close remain behind RHODIZ Action Fabric and confirmation receipts.
+          Browser effects are executed only by RHODIZ. Navigation consumes a one-shot RHODIZ
+          confirmation ticket; OpenMuse never authorizes the effect itself.
         </Text>
-        <Button
-          icon={RotateCw}
-          onPress={() =>
-            void refresh()
-              .then(() => setError(""))
-              .catch((e) => setError(String(e)))
-          }
-        >
-          Refresh preview
-        </Button>
+        <View style={[s.row, { gap: 10, flexWrap: "wrap" }]}>
+          <Button
+            icon={RotateCw}
+            onPress={() =>
+              void refresh()
+                .then(() => setError(""))
+                .catch((e) => setError(String(e)))
+            }
+          >
+            Refresh preview
+          </Button>
+          <Button danger busy={busy} onPress={() => void closeRhodiz()}>
+            Close RHODIZ session
+          </Button>
+        </View>
       </Sheet>
     );
 
