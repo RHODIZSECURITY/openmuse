@@ -117,6 +117,13 @@ function MailDetail({ mail: m }: { mail: Mail }) {
     let active = true;
     setLoading(true);
     setError("");
+    if (sovereign) {
+      setLocal(initial);
+      setLoading(false);
+      return () => {
+        active = false;
+      };
+    }
     void api
       .request<Mail[]>(`/api/mail/threads/${encodeURIComponent(m.threadId)}`)
       .then((items) => {
@@ -847,6 +854,7 @@ function BrowserDetail({ initial }: { initial: BrowserSession }) {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [retry, setRetry] = useState(0);
+  const sovereign = w.runtime.browserBackend === "rhodiz";
   const latest = w.browsers.find((b) => b.id === initial.id);
   const browser = {
     ...(latest && latest.updatedAt > local.updatedAt ? latest : local),
@@ -871,7 +879,7 @@ function BrowserDetail({ initial }: { initial: BrowserSession }) {
     return () => {
       active = false;
     };
-  }, [api, initial.id, retry]);
+  }, [api, initial, retry, sovereign]);
   async function importDownloads() {
     setBusy(true);
     setError("");
@@ -916,6 +924,48 @@ function BrowserDetail({ initial }: { initial: BrowserSession }) {
       setBusy(false);
     }
   }
+  if (sovereign)
+    return (
+      <Sheet
+        title={browserSite(browser.url)}
+        subtitle={`RHODIZ canonical browser · updated ${timeLabel(browser.updatedAt)}`}
+        onClose={close}
+        wide
+      >
+        <ErrorNotice error={error} />
+        {browser.previewUrl ? (
+          <Image
+            source={{
+              uri: api.url(browser.previewUrl),
+              headers: { Authorization: `Bearer ${api.token}` },
+            }}
+            style={{ width: "100%", height: 450, backgroundColor: colors.canvas }}
+            resizeMode="contain"
+          />
+        ) : (
+          <Empty
+            icon={Globe2}
+            title="Preview is not available"
+            detail="RHODIZ owns this browser session. Refresh the workspace to request its latest read-only preview."
+          />
+        )}
+        <Text style={[s.small, { marginTop: 18 }]}>
+          OpenMuse is read-only for canonical RHODIZ browser sessions. Navigation, takeover,
+          downloads and close remain behind RHODIZ Action Fabric and confirmation receipts.
+        </Text>
+        <Button
+          icon={RotateCw}
+          onPress={() =>
+            void refresh()
+              .then(() => setError(""))
+              .catch((e) => setError(String(e)))
+          }
+        >
+          Refresh preview
+        </Button>
+      </Sheet>
+    );
+
   return (
     <Sheet
       title={browserSite(browser.url)}
