@@ -103,7 +103,7 @@ export async function rhodizBrowserPreview(
   config: Config,
   authorization: string | undefined,
   sessionId: string,
-): Promise<Uint8Array> {
+): Promise<Buffer> {
   if (config.authBackend !== "rhodiz" || !config.rhodizApiUrl)
     throw new AppError("RHODIZ browser is not configured", 503);
   const safeId = z.string().min(1).max(128).regex(/^[A-Za-z0-9_-]+$/).parse(sessionId);
