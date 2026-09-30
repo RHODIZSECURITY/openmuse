@@ -115,6 +115,7 @@ export class AgentService {
     }
   }
   async ensure(owner: string) {
+    if (this.config.authBackend === "rhodiz") return;
     await this.db.insertIfAbsent(owner, "agent-settings", {
       id: "identity",
       name: "OpenMuse",
