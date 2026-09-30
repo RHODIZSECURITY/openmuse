@@ -16,6 +16,8 @@ export interface Config {
   encryptionKey?: string;
   model?: string;
   agentBackend: "sample" | "model" | "agui";
+  authBackend: "local" | "rhodiz";
+  rhodizApiUrl?: string;
   agentUrl?: string;
   agentToken?: string;
   intelligenceApiKey?: string;
@@ -50,8 +52,13 @@ export function readConfig(): Config {
   const backend = process.env.AGENT_BACKEND ?? (mode === "sample" ? "sample" : "model");
   if (backend !== "sample" && backend !== "model" && backend !== "agui")
     throw new Error("AGENT_BACKEND must be sample, model or agui");
+  const authBackend = process.env.AUTH_BACKEND ?? "local";
+  if (authBackend !== "local" && authBackend !== "rhodiz")
+    throw new Error("AUTH_BACKEND must be local or rhodiz");
   if (mode === "live" && backend === "sample")
     throw new Error("Live workspaces cannot use the sample agent");
+  if (authBackend === "rhodiz" && backend !== "agui")
+    throw new Error("AUTH_BACKEND=rhodiz requires AGENT_BACKEND=agui");
   const port = Number(process.env.PORT ?? 8787);
   const publicUrl = process.env.PUBLIC_API_URL ?? `http://localhost:${port}`;
   const config: Config = {
@@ -65,6 +72,8 @@ export function readConfig(): Config {
     encryptionKey: process.env.TOKEN_ENCRYPTION_KEY,
     model: process.env.MODEL,
     agentBackend: backend,
+    authBackend,
+    rhodizApiUrl: process.env.RHODIZ_API_URL?.replace(/\/$/, ""),
     agentUrl: process.env.AGENT_URL,
     agentToken: process.env.AGENT_TOKEN,
     intelligenceApiKey: process.env.CPK_INTELLIGENCE_API_KEY,
@@ -81,13 +90,18 @@ export function readConfig(): Config {
       process.env.ALLOWED_ORIGINS ?? "http://localhost:8081,http://127.0.0.1:8081"
     ).split(","),
   };
+  if (authBackend === "rhodiz" && !config.rhodizApiUrl)
+    throw new Error("AUTH_BACKEND=rhodiz requires RHODIZ_API_URL");
+  if (authBackend === "rhodiz" && !config.agentUrl)
+    throw new Error("AUTH_BACKEND=rhodiz requires AGENT_URL for the RHODIZ AG-UI bridge");
+  if (mode === "live" && !config.encryptionKey)
+    throw new Error("Live mode requires TOKEN_ENCRYPTION_KEY (32-byte base64)");
   if (
     mode === "live" &&
-    (!config.accessKey || config.accessKey.length < 24 || !config.encryptionKey)
+    authBackend === "local" &&
+    (!config.accessKey || config.accessKey.length < 24)
   )
-    throw new Error(
-      "Live mode requires OPENMUSE_ACCESS_KEY (24+ characters) and TOKEN_ENCRYPTION_KEY (32-byte base64)",
-    );
+    throw new Error("Local live mode requires OPENMUSE_ACCESS_KEY (24+ characters)");
   if (mode === "sample" && !["127.0.0.1", "localhost", "::1"].includes(config.host))
     throw new Error("Sample workspace is local-only. HOST must be a loopback address.");
   return config;
