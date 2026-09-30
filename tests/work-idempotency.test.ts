@@ -237,7 +237,6 @@ test("attachment import recovers after mapping loss and isolates reconnections",
   assert.notEqual((await server.workspace.importAttachment(owner, reference)).id, recovered.id);
 });
 
-
 for (const checkpoint of ["artifact", "cache"] as const) {
   test(`model fill reuses its PDF after a failed ${checkpoint} checkpoint`, async (t) => {
     const directory = await mkdtemp(join(tmpdir(), "openmuse-model-fill-"));
@@ -295,9 +294,7 @@ for (const checkpoint of ["artifact", "cache"] as const) {
     assert.ok(interrupted);
     const waiting = await server.agent.getTask(owner, task.id);
     assert.equal(waiting.status, "waiting_input", waiting.error ?? waiting.question);
-    const outputs = (await server.files.list(owner)).filter(
-      (file) => file.parentId === source.id,
-    );
+    const outputs = (await server.files.list(owner)).filter((file) => file.parentId === source.id);
     assert.equal(outputs.length, 1);
     assert.deepEqual(waiting.artifactIds, checkpoint === "artifact" ? [] : [outputs[0].id]);
     assert.equal(waiting.state.operations, undefined);
