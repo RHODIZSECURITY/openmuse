@@ -117,13 +117,6 @@ function MailDetail({ mail: m }: { mail: Mail }) {
     let active = true;
     setLoading(true);
     setError("");
-    if (sovereign) {
-      setLocal(initial);
-      setLoading(false);
-      return () => {
-        active = false;
-      };
-    }
     void api
       .request<Mail[]>(`/api/mail/threads/${encodeURIComponent(m.threadId)}`)
       .then((items) => {
@@ -865,6 +858,13 @@ function BrowserDetail({ initial }: { initial: BrowserSession }) {
     let active = true;
     setLoading(true);
     setError("");
+    if (sovereign) {
+      setLocal(initial);
+      setLoading(false);
+      return () => {
+        active = false;
+      };
+    }
     void api
       .request<BrowserSession>(`/api/browsers/${initial.id}`)
       .then((session) => {
@@ -879,7 +879,7 @@ function BrowserDetail({ initial }: { initial: BrowserSession }) {
     return () => {
       active = false;
     };
-  }, [api, initial, retry, sovereign]);
+  }, [api, initial, initial.id, retry, sovereign]);
   async function importDownloads() {
     setBusy(true);
     setError("");
