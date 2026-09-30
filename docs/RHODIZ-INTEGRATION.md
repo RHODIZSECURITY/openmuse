@@ -50,6 +50,9 @@ The RHODIZ AG-UI bridge is intentionally narrower than the full OpenMuse runtime
 - MemoryOS and RHODIZ persistence remain active and are the only canonical runtime history/memory boundary;
 - OpenMuse local conversation persistence is disabled in RHODIZ mode;
 - tool execution through this bridge is currently disabled;
+- RHODIZ browser availability is projected from the canonical `/api/rhodiz/computer/estado` endpoint;
+- OpenMuse's local Browser worker and local Linux Computer routes are fail-closed in RHODIZ mode;
+- browser navigation/takeover remains disabled until RHODIZ confirmation-ticket and receipt semantics are explicitly adapted;
 - no OpenMuse approval state can authorize a RHODIZ side effect;
 - no production deployment or HIL certification is implied by this integration branch.
 
@@ -67,6 +70,8 @@ The RHODIZ-auth slice is covered by tests that verify:
 - RHODIZ hydration returns canonical messages while local `PUT /api/conversation` persistence is not used;
 - the proxy rejects history payloads that do not assert `canonical: "rhodiz"`;
 - a configured CopilotKit Intelligence key cannot enable Rich Threads ownership in RHODIZ mode.
+- a configured OpenMuse browser worker cannot become active in RHODIZ mode; canonical browser health comes only from RHODIZ.
+- `/api/browsers/*` and `/api/computer/*` local effects return fail-closed in RHODIZ mode.
 
 ## Slice provenance
 
