@@ -10,8 +10,7 @@ const statusSchema = z.object({
 });
 
 function bearerToken(authorization?: string): string {
-  if (!authorization?.startsWith("Bearer "))
-    throw new AppError("Sign in to RHODIZ", 401);
+  if (!authorization?.startsWith("Bearer ")) throw new AppError("Sign in to RHODIZ", 401);
   const token = authorization.slice(7).trim();
   if (!token) throw new AppError("Sign in to RHODIZ", 401);
   return token;
@@ -32,8 +31,7 @@ export async function rhodizBrowserState(
   } catch {
     return "offline";
   }
-  if (response.status === 401)
-    throw new AppError("RHODIZ session expired. Sign in again.", 401);
+  if (response.status === 401) throw new AppError("RHODIZ session expired. Sign in again.", 401);
   if (response.status === 403) return "forbidden";
   if (response.status === 404) return "disabled";
   if (!response.ok) return "offline";
