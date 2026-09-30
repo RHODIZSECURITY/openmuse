@@ -48,7 +48,8 @@ async function rhodizRequest<T>(
     if (response.status === 401 || response.status === 403)
       throw new AppError("RHODIZ session expired. Sign in again.", 401);
     if (response.status === 404) throw new AppError("RHODIZ item not found", 404);
-    if (response.status === 409) throw new AppError("RHODIZ item changed; refresh and try again", 409);
+    if (response.status === 409)
+      throw new AppError("RHODIZ item changed; refresh and try again", 409);
     throw new AppError("RHODIZ request failed", response.status >= 500 ? 503 : 422);
   }
   try {
@@ -114,15 +115,20 @@ export async function rhodizCreateMemory(
   authorization: string | undefined,
   text: string,
 ) {
-  return rhodizRequest<{ id: string; ok: boolean }>(config, authorization, "/api/memoria/recuerdos", {
-    method: "POST",
-    body: JSON.stringify({
-      tipo: "manual",
-      contenido: text,
-      etiquetas: ["manual", "openmuse"],
-      fuerza: 1,
-    }),
-  });
+  return rhodizRequest<{ id: string; ok: boolean }>(
+    config,
+    authorization,
+    "/api/memoria/recuerdos",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        tipo: "manual",
+        contenido: text,
+        etiquetas: ["manual", "openmuse"],
+        fuerza: 1,
+      }),
+    },
+  );
 }
 
 export async function rhodizForgetMemory(
