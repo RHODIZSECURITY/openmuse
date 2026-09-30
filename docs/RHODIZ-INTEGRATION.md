@@ -95,3 +95,22 @@ The RHODIZ-auth slice is covered by tests that verify:
 - Work file-producing durability remains blocked on upstream OpenMuse issue #32 / PR #45 until that fix is merged, audited and revalidated.
 
 The integration remains a branch/PR candidate until its exact SHA passes the required RHODIZ gates.
+
+## Supply-chain compatibility hardening
+
+The RHODIZ fork pins the following transitive security remediations in
+`pnpm-workspace.yaml` and `pnpm-lock.yaml`:
+
+- `undici 5.29.0 -> 6.28.1`;
+- `image-size 1.2.1 -> 2.0.3`;
+- `uuid 7.0.3 -> 11.1.1`.
+
+Metro `0.83.3` historically passes a filesystem path to `image-size`, while
+`image-size 2.x` accepts image bytes. The compatibility change is kept as the
+versioned pnpm patch `patches/metro@0.83.3.patch`: Metro reads the asset bytes
+before invoking `image-size`. This does not grant OpenMuse any RHODIZ authority
+and does not change runtime routing.
+
+Certification for this override set must include a frozen-lockfile install,
+`pnpm audit --prod`, full tests, Biome, root/mobile typecheck, server build,
+web export, and iOS prebuild without dependency installation.
