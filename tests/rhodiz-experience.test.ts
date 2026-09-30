@@ -44,6 +44,9 @@ test("RHODIZ Experience projects canonical identity and MemoryOS without local d
         rol: "admin",
         perfil: { rhodiz_tone: "thoughtful" },
       });
+    if (url.endsWith("/api/rhodiz/tareas")) return Response.json({ tareas: [] });
+    if (url.endsWith("/api/rhodiz/proactividad/avisos?limite=50"))
+      return Response.json({ avisos: [] });
     if (url.includes("/api/memoria/buscar?q="))
       return Response.json({
         recuerdos: [
@@ -91,8 +94,12 @@ test("RHODIZ Experience projects canonical identity and MemoryOS without local d
   assert.deepEqual(workspace.authority, {
     identity: "rhodiz",
     memory: "rhodiz",
+    work: "rhodiz",
+    notifications: "rhodiz",
     identityMutable: false,
     memoryEditable: false,
+    workMutable: false,
+    goalsIdeasMutable: false,
   });
   assert.equal(workspace.memories.length, 1);
   assert.equal(workspace.memories[0].id, "memory-1");

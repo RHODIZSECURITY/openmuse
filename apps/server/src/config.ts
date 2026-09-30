@@ -39,6 +39,10 @@ const missingIntelligenceKeyMessage =
   "then set the generated server-only key. " +
   "See https://docs.copilotkit.ai/intelligence/connect-your-runtime";
 
+export function shouldStartLocalTaskWorker(config: Config): boolean {
+  return config.authBackend !== "rhodiz" && config.taskWorkerEnabled !== false;
+}
+
 export function assertApiDeploymentConfig(config: Config): void {
   if (
     config.mode === "live" &&

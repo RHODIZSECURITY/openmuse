@@ -7,7 +7,14 @@ import type {
   AgentNotification,
 } from "../../../../packages/domain/src/agent.ts";
 import { AppError } from "../errors.ts";
-import { rhodizCreateMemory, rhodizExperienceProjection, rhodizForgetMemory } from "../rhodiz.ts";
+import {
+  rhodizCancelTask,
+  rhodizCreateMemory,
+  rhodizExperienceProjection,
+  rhodizForgetMemory,
+  rhodizTaskDetail,
+  rhodizWorkProjection,
+} from "../rhodiz.ts";
 import type { AgentService } from "./service.ts";
 
 const text = z.string().trim().min(1).max(4000);
@@ -29,34 +36,64 @@ const goalPatchSchema = z.object({
 export function agentRoutes(service: AgentService): Hono<{ Variables: { owner: string } }> {
   const app = new Hono<{ Variables: { owner: string } }>();
   app.get("/", async (c) => {
-    const snapshot = await service.snapshot(c.get("owner"));
-    if (service.config.authBackend !== "rhodiz") return c.json(snapshot);
-    const projection = await rhodizExperienceProjection(
-      service.config,
-      c.req.header("authorization"),
-    );
+    if (service.config.authBackend !== "rhodiz")
+      return c.json(await service.snapshot(c.get("owner")));
+    const authorization = c.req.header("authorization");
+    const [experience, work] = await Promise.all([
+      rhodizExperienceProjection(service.config, authorization),
+      rhodizWorkProjection(service.config, authorization),
+    ]);
     return c.json({
-      ...snapshot,
-      identity: projection.identity,
-      memories: projection.memories,
+      tasks: work.tasks,
+      goals: [],
+      monitors: [],
+      ideas: [],
+      memories: experience.memories,
+      artifacts: [],
+      notifications: work.notifications,
+      identity: experience.identity,
       authority: {
         identity: "rhodiz",
         memory: "rhodiz",
+        work: "rhodiz",
+        notifications: "rhodiz",
         identityMutable: false,
         memoryEditable: false,
+        workMutable: false,
+        goalsIdeasMutable: false,
       },
+      worker: work.worker,
     });
   });
-  app.post("/tasks", async (c) =>
-    c.json(await service.createTask(c.get("owner"), await c.req.json()), 201),
-  );
-  app.get("/tasks/:id", async (c) =>
-    c.json(await service.detail(c.get("owner"), c.req.param("id"))),
-  );
+  app.post("/tasks", async (c) => {
+    if (service.config.authBackend === "rhodiz")
+      throw new AppError(
+        "RHODIZ Work is canonical; OpenMuse task creation remains disabled until the Work/Action Fabric contract is certified.",
+        409,
+      );
+    return c.json(await service.createTask(c.get("owner"), await c.req.json()), 201);
+  });
+  app.get("/tasks/:id", async (c) => {
+    if (service.config.authBackend === "rhodiz")
+      return c.json(
+        await rhodizTaskDetail(service.config, c.req.header("authorization"), c.req.param("id")),
+      );
+    return c.json(await service.detail(c.get("owner"), c.req.param("id")));
+  });
   app.post("/tasks/:id/control", async (c) => {
     const { action } = z
       .object({ action: z.enum(["pause", "resume", "cancel", "retry"]) })
       .parse(await c.req.json());
+    if (service.config.authBackend === "rhodiz") {
+      if (action !== "cancel")
+        throw new AppError(
+          "This RHODIZ task control is not exposed through OpenMuse yet; approval/resume/retry remain owned by RHODIZ Action Fabric.",
+          409,
+        );
+      return c.json(
+        await rhodizCancelTask(service.config, c.req.header("authorization"), c.req.param("id")),
+      );
+    }
     return c.json(await service.control(c.get("owner"), c.req.param("id"), action));
   });
   app.post("/tasks/:id/input", async (c) => {
@@ -68,27 +105,53 @@ export function agentRoutes(service: AgentService): Hono<{ Variables: { owner: s
           .optional(),
       })
       .parse(await c.req.json());
+    if (service.config.authBackend === "rhodiz")
+      throw new AppError(
+        "RHODIZ task input/approval is not exposed through OpenMuse until Action Fabric ticket and receipt semantics are certified.",
+        409,
+      );
     return c.json(
       await service.answer(c.get("owner"), c.req.param("id"), body.answer, body.fields),
     );
   });
-  app.post("/goals", async (c) =>
-    c.json(await service.createGoal(c.get("owner"), await c.req.json()), 201),
-  );
+  app.post("/goals", async (c) => {
+    if (service.config.authBackend === "rhodiz")
+      throw new AppError("Goals are not stored in OpenMuse while RHODIZ Work is canonical.", 409);
+    return c.json(await service.createGoal(c.get("owner"), await c.req.json()), 201);
+  });
   app.post("/goals/:id", async (c) => {
     const body = goalPatchSchema.parse(await c.req.json());
+    if (service.config.authBackend === "rhodiz")
+      throw new AppError("Goals are not stored in OpenMuse while RHODIZ Work is canonical.", 409);
     return c.json(await service.updateGoal(c.get("owner"), c.req.param("id"), body));
   });
-  app.post("/monitors", async (c) =>
-    c.json(await service.createMonitor(c.get("owner"), await c.req.json()), 201),
-  );
+  app.post("/monitors", async (c) => {
+    if (service.config.authBackend === "rhodiz")
+      throw new AppError(
+        "OpenMuse monitors are disabled in RHODIZ mode; scheduled/condition Work must use the canonical RHODIZ engine.",
+        409,
+      );
+    return c.json(await service.createMonitor(c.get("owner"), await c.req.json()), 201);
+  });
   app.post("/monitors/:id/control", async (c) => {
     const { action } = z
       .object({ action: z.enum(["pause", "resume", "stop", "check"]) })
       .parse(await c.req.json());
+    if (service.config.authBackend === "rhodiz")
+      throw new AppError(
+        "OpenMuse monitors are disabled in RHODIZ mode; use the canonical RHODIZ scheduled/condition Work surface.",
+        409,
+      );
     return c.json(await service.controlMonitor(c.get("owner"), c.req.param("id"), action));
   });
-  app.post("/ideas/refresh", async (c) => c.json(await service.refreshIdeas(c.get("owner"))));
+  app.post("/ideas/refresh", async (c) => {
+    if (service.config.authBackend === "rhodiz")
+      throw new AppError(
+        "OpenMuse Ideas are disabled in RHODIZ mode; suggestions require a canonical RHODIZ Outcome contract.",
+        409,
+      );
+    return c.json(await service.refreshIdeas(c.get("owner")));
+  });
   app.post("/ideas/:id", async (c) => {
     const body = z
       .object({
@@ -96,6 +159,11 @@ export function agentRoutes(service: AgentService): Hono<{ Variables: { owner: s
         prompt: z.string().trim().min(1).max(12000).optional(),
       })
       .parse(await c.req.json());
+    if (service.config.authBackend === "rhodiz")
+      throw new AppError(
+        "OpenMuse Ideas are disabled in RHODIZ mode; accept/dismiss must be backed by a canonical RHODIZ Outcome contract.",
+        409,
+      );
     return c.json(
       await service.decideIdea(c.get("owner"), c.req.param("id"), body.action, body.prompt),
     );
@@ -185,10 +253,19 @@ export function agentRoutes(service: AgentService): Hono<{ Variables: { owner: s
     if (!identity) throw new AppError("Agent identity changed; refresh and try again", 409);
     return c.json(identity);
   });
-  app.get("/notifications", async (c) =>
-    c.json((await service.snapshot(c.get("owner"))).notifications),
-  );
+  app.get("/notifications", async (c) => {
+    if (service.config.authBackend === "rhodiz")
+      return c.json(
+        (await rhodizWorkProjection(service.config, c.req.header("authorization"))).notifications,
+      );
+    return c.json((await service.snapshot(c.get("owner"))).notifications);
+  });
   app.post("/notifications/:id/read", async (c) => {
+    if (service.config.authBackend === "rhodiz")
+      throw new AppError(
+        "RHODIZ proactive alerts do not expose canonical read-state mutation through OpenMuse.",
+        409,
+      );
     const notification = await service.db.compareAndSwap<AgentNotification>(
       c.get("owner"),
       "notifications",
@@ -200,6 +277,7 @@ export function agentRoutes(service: AgentService): Hono<{ Variables: { owner: s
     return c.json(notification);
   });
   app.post("/sample-page", async (c) => {
+    if (service.config.authBackend === "rhodiz") throw new AppError("Not found", 404);
     if (service.config.mode !== "sample") throw new AppError("Not found", 404);
     const body = z.object({ text: z.string().max(100000) }).parse(await c.req.json());
     await service.db.put(c.get("owner"), "sample-pages", { id: "availability", text: body.text });

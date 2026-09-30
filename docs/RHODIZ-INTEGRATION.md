@@ -58,6 +58,20 @@ The RHODIZ AG-UI bridge is intentionally narrower than the full OpenMuse runtime
 
 Tools will only be enabled after cancellation, approval, receipt and idempotency semantics map cleanly into RHODIZ Action Fabric.
 
+## Work and outcome projection
+
+In `AUTH_BACKEND=rhodiz`, OpenMuse does not run a second durable Work engine:
+
+- the local OpenMuse `TaskWorker` is not started;
+- task lists/details are read-only projections of owner-scoped RHODIZ `/api/rhodiz/tareas`;
+- proactive notifications are read-only projections of RHODIZ `/api/rhodiz/proactividad/avisos`;
+- local OpenMuse Tasks, Goals, Ideas, Monitors, approvals and Activity records are not surfaced as RHODIZ state;
+- OpenMuse task creation, resume/retry/input/approval, Goals, Ideas and Monitors fail closed until a canonical RHODIZ Work/Outcome contract is certified;
+- task cancellation may be relayed to the canonical RHODIZ cancel endpoint because it reduces authority and does not authorize an external effect;
+- RHODIZ confirmation tickets and pending action identifiers are never copied into the OpenMuse projection.
+
+This is an authority-removal slice, not a Work promotion. File-producing Work remains blocked by the upstream durability/idempotency gate tracked in the RHODIZ OpenSpec.
+
 ## Verification
 
 The RHODIZ-auth slice is covered by tests that verify:

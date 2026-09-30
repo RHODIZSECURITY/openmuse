@@ -281,12 +281,22 @@ export async function createApp(
     c.json(await workspace.thread(c.get("owner"), c.req.param("id"))),
   );
   app.post("/api/actions", async (c) => {
+    if (config.authBackend === "rhodiz")
+      throw new AppError(
+        "RHODIZ Action Fabric is canonical; OpenMuse cannot create a parallel approval.",
+        409,
+      );
     const input = proposalSchema.parse(await c.req.json());
     if (input.kind === "email.send")
       for (const id of input.data.attachmentIds) await files.get(c.get("owner"), id);
     return c.json(await actions.propose(c.get("owner"), input), 201);
   });
   app.post("/api/actions/:id/decide", async (c) => {
+    if (config.authBackend === "rhodiz")
+      throw new AppError(
+        "RHODIZ Action Fabric is canonical; OpenMuse cannot decide a parallel approval.",
+        409,
+      );
     const body = z
       .object({ hash: z.string(), decision: z.enum(["approve", "deny"]) })
       .parse(await c.req.json());

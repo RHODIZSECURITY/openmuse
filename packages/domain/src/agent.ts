@@ -133,8 +133,12 @@ export interface AgentWorkspace {
   authority?: {
     identity: "local" | "rhodiz";
     memory: "local" | "rhodiz";
+    work?: "local" | "rhodiz";
+    notifications?: "local" | "rhodiz";
     identityMutable: boolean;
     memoryEditable: boolean;
+    workMutable?: boolean;
+    goalsIdeasMutable?: boolean;
   };
   worker: { running: boolean; lastTickAt?: string };
 }

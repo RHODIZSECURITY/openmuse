@@ -1,4 +1,10 @@
-import type { AgentIdentity, AgentMemory } from "../../../packages/domain/src/agent.ts";
+import { createHash } from "node:crypto";
+import type {
+  AgentIdentity,
+  AgentMemory,
+  AgentNotification,
+  AgentTask,
+} from "../../../packages/domain/src/agent.ts";
 import type { Config } from "./config.ts";
 import { AppError } from "./errors.ts";
 
@@ -14,6 +20,30 @@ type RhodizSession = {
   user_id?: unknown;
   usuario?: unknown;
   perfil?: unknown;
+};
+
+type RhodizTask = {
+  id?: unknown;
+  prompt?: unknown;
+  estado?: unknown;
+  resultado?: unknown;
+  ticket_pendiente?: unknown;
+  accion_pendiente?: unknown;
+  ultimo_error?: unknown;
+  usar_memoria?: unknown;
+  permitir_herramientas?: unknown;
+  pasos_totales?: unknown;
+  pasos_completados?: unknown;
+  creado_en?: unknown;
+  actualizado_en?: unknown;
+};
+
+type RhodizNotice = {
+  clave?: unknown;
+  nivel?: unknown;
+  titulo?: unknown;
+  detalle?: unknown;
+  ts?: unknown;
 };
 
 function bearer(authorization?: string) {
@@ -63,6 +93,96 @@ function createdAt(value: unknown): string {
   const seconds = Number(value);
   if (!Number.isFinite(seconds) || seconds <= 0) return new Date(0).toISOString();
   return new Date(seconds * 1000).toISOString();
+}
+
+function dateValue(value: unknown): string {
+  if (typeof value === "number" || (typeof value === "string" && /^\d+(?:\.\d+)?$/.test(value)))
+    return createdAt(value);
+  if (typeof value === "string") {
+    const millis = Date.parse(value);
+    if (Number.isFinite(millis)) return new Date(millis).toISOString();
+  }
+  return new Date(0).toISOString();
+}
+
+function stableProjectionId(prefix: string, ...parts: string[]) {
+  return `${prefix}-${createHash("sha256").update(parts.join("\x1f")).digest("hex").slice(0, 32)}`;
+}
+
+function taskStatus(task: RhodizTask): AgentTask["status"] {
+  const state = String(task.estado ?? "");
+  const approval =
+    state === "pausada" &&
+    (Boolean(String(task.ticket_pendiente ?? "").trim()) ||
+      Boolean(String(task.accion_pendiente ?? "").trim()));
+  if (approval) return "waiting_approval";
+  switch (state) {
+    case "pendiente":
+      return "queued";
+    case "ejecutando":
+      return "running";
+    case "pausada":
+      return "paused";
+    case "completada":
+      return "succeeded";
+    case "fallida":
+      return "failed";
+    case "cancelada":
+      return "cancelled";
+    default:
+      return "paused";
+  }
+}
+
+function taskProjection(task: RhodizTask): AgentTask | null {
+  const id = typeof task.id === "string" ? task.id.trim() : "";
+  const prompt = typeof task.prompt === "string" ? task.prompt : "";
+  if (!id || !prompt.trim()) return null;
+  const status = taskStatus(task);
+  const result = typeof task.resultado === "string" ? task.resultado : "";
+  const error = typeof task.ultimo_error === "string" ? task.ultimo_error : "";
+  const approvalRequired = status === "waiting_approval";
+  const title = prompt.replace(/\s+/g, " ").trim().slice(0, 160) || "RHODIZ task";
+  return {
+    id,
+    title,
+    prompt,
+    kind: "agent",
+    status,
+    plan: [],
+    evidence: [],
+    input: { canonical: "rhodiz" },
+    state: {
+      canonical: "rhodiz",
+      approvalRequired,
+      toolsAllowed: Boolean(task.permitir_herramientas),
+      memoryEnabled: Boolean(task.usar_memoria),
+      stepsTotal: Number(task.pasos_totales) || 0,
+      stepsCompleted: Number(task.pasos_completados) || 0,
+    },
+    createdAt: createdAt(task.creado_en),
+    updatedAt: createdAt(task.actualizado_en),
+    attempts: 0,
+    result: result || undefined,
+    error: error || null,
+    question: approvalRequired ? "RHODIZ approval is required to continue this task." : undefined,
+    artifactIds: [],
+  };
+}
+
+function noticeProjection(notice: RhodizNotice): AgentNotification | null {
+  const title = typeof notice.titulo === "string" ? notice.titulo.trim() : "";
+  const body = typeof notice.detalle === "string" ? notice.detalle.trim() : "";
+  const key = typeof notice.clave === "string" ? notice.clave : "";
+  const ts = dateValue(notice.ts);
+  if (!title || !body) return null;
+  return {
+    id: stableProjectionId("rhodiz-notice", key, ts, title, body),
+    title,
+    body,
+    createdAt: ts,
+    read: false,
+  };
 }
 
 export async function rhodizExperienceProjection(
@@ -143,5 +263,64 @@ export async function rhodizForgetMemory(
     authorization,
     `/api/memoria/recuerdos/${encodeURIComponent(id)}?${query}`,
     { method: "DELETE" },
+  );
+}
+
+export async function rhodizWorkProjection(
+  config: Config,
+  authorization?: string,
+): Promise<{
+  tasks: AgentTask[];
+  notifications: AgentNotification[];
+  worker: { running: boolean };
+}> {
+  const [taskPayload, noticePayload] = await Promise.all([
+    rhodizRequest<{ tareas?: RhodizTask[] }>(config, authorization, "/api/rhodiz/tareas"),
+    rhodizRequest<{ avisos?: RhodizNotice[] }>(
+      config,
+      authorization,
+      "/api/rhodiz/proactividad/avisos?limite=50",
+    ),
+  ]);
+  const tasks = (taskPayload.tareas ?? []).flatMap((task) => {
+    const projected = taskProjection(task);
+    return projected ? [projected] : [];
+  });
+  const notifications = (noticePayload.avisos ?? []).flatMap((notice) => {
+    const projected = noticeProjection(notice);
+    return projected ? [projected] : [];
+  });
+  return {
+    tasks,
+    notifications,
+    worker: { running: tasks.some((task) => task.status === "running") },
+  };
+}
+
+export async function rhodizTaskDetail(
+  config: Config,
+  authorization: string | undefined,
+  id: string,
+) {
+  const task = await rhodizRequest<RhodizTask>(
+    config,
+    authorization,
+    `/api/rhodiz/tareas/${encodeURIComponent(id)}`,
+  );
+  const projected = taskProjection(task);
+  if (!projected) throw new AppError("RHODIZ returned an invalid task", 502);
+  return { ...projected, files: [], browsers: [], events: [], artifacts: [] };
+}
+
+export async function rhodizCancelTask(
+  config: Config,
+  authorization: string | undefined,
+  id: string,
+) {
+  return rhodizRequest<{ ok: boolean; estado: string }>(
+    config,
+    authorization,
+    `/api/rhodiz/tareas/${encodeURIComponent(id)}/cancelar`,
+    { method: "POST" },
   );
 }

@@ -876,13 +876,15 @@ function FinanceArtifact({ artifact }: { artifact: AgentArtifact }) {
 }
 export function DelegateSheet() {
   const { workspace, close, open } = useWorkspace();
-  const { delegate } = useAgentWorkspace();
+  const { data, delegate } = useAgentWorkspace();
   const [kind, setKind] = useState<AgentTask["kind"]>("plan");
   const [prompt, setPrompt] = useState("");
   const [messageId, setMessageId] = useState("");
   const [csv, setCsv] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const rhodizWorkReadOnly =
+    data?.authority?.work === "rhodiz" && data.authority.workMutable === false;
   async function submit() {
     setBusy(true);
     setError("");
@@ -899,6 +901,23 @@ export function DelegateSheet() {
       setBusy(false);
     }
   }
+  if (rhodizWorkReadOnly)
+    return (
+      <Sheet
+        title="RHODIZ Work"
+        subtitle="RHODIZ Work is canonical; OpenMuse is presenting its state read-only."
+        onClose={close}
+      >
+        <Card style={{ gap: 12 }}>
+          <Text style={s.heading}>Delegation remains fail-closed</Text>
+          <Text style={s.muted}>
+            Task creation, approval and resume/retry stay in RHODIZ until the Work and Action Fabric
+            idempotency, ticket and receipt contract is certified. OpenMuse does not start a second
+            task engine.
+          </Text>
+        </Card>
+      </Sheet>
+    );
   return (
     <Sheet
       title="Hand over an outcome"
@@ -998,6 +1017,8 @@ export function IdeasScreen() {
   const { data, mutate } = useAgentWorkspace();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const rhodizIdeasReadOnly =
+    data?.authority?.work === "rhodiz" && data.authority.goalsIdeasMutable === false;
   async function refreshIdeas() {
     setBusy(true);
     setError("");
@@ -1010,6 +1031,17 @@ export function IdeasScreen() {
     }
   }
   const ideas = data?.ideas.filter((idea) => idea.status === "new") || [];
+  if (rhodizIdeasReadOnly)
+    return (
+      <View style={{ gap: 20 }}>
+        <AgentStatus />
+        <Empty
+          icon={Lightbulb}
+          title="Suggestions stay with RHODIZ"
+          detail="OpenMuse does not keep a parallel Ideas store. Suggestions will appear here only after RHODIZ exposes a canonical Outcome contract."
+        />
+      </View>
+    );
   return (
     <View style={{ gap: 20 }}>
       <AgentStatus />
@@ -1141,9 +1173,22 @@ export function GoalsScreen() {
   const [selectedGoal, setSelectedGoal] = useState<string>();
   const [selectedMonitor, setSelectedMonitor] = useState<string>();
   const [showAll, setShowAll] = useState(false);
+  const rhodizGoalsReadOnly =
+    data?.authority?.work === "rhodiz" && data.authority.goalsIdeasMutable === false;
   const goal = data?.goals.find((item) => item.id === selectedGoal);
   const monitor = data?.monitors.find((item) => item.id === selectedMonitor);
   const monitors = data?.monitors || [];
+  if (rhodizGoalsReadOnly)
+    return (
+      <View style={{ gap: 22 }}>
+        <AgentStatus />
+        <Empty
+          icon={Target}
+          title="Goals and tracking stay with RHODIZ"
+          detail="OpenMuse does not create a parallel Goals, Ideas or Monitor store while RHODIZ Work is canonical."
+        />
+      </View>
+    );
   return (
     <View style={{ gap: 22 }}>
       <AgentStatus />

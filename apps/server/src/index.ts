@@ -1,6 +1,6 @@
 import { serve } from "@hono/node-server";
 import { createApp } from "./app.ts";
-import { assertApiDeploymentConfig, readConfig } from "./config.ts";
+import { assertApiDeploymentConfig, readConfig, shouldStartLocalTaskWorker } from "./config.ts";
 import { createStore } from "./db.ts";
 
 const config = readConfig();
@@ -11,7 +11,7 @@ const db = await createStore({
 });
 await db.recoverInterruptedActions();
 const { app, agent } = await createApp(db, config);
-if (config.taskWorkerEnabled) agent.start();
+if (shouldStartLocalTaskWorker(config)) agent.start();
 const server = serve({ fetch: app.fetch, port: config.port, hostname: config.host }, () =>
   console.log(`OpenMuse ${config.mode} API ready at ${config.publicUrl}`),
 );
