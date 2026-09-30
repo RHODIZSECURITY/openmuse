@@ -826,14 +826,17 @@ export function BrowserScreen() {
   const [error, setError] = useState("");
   const sovereign = w.runtime.browserBackend === "rhodiz";
   async function create() {
-    if (sovereign) return;
+    if (!url.trim()) return;
     setError("");
     setBusy(true);
     try {
-      const browser = await api.request<BrowserSession>("/api/browsers", { url });
+      const target = browserAddress(url);
+      const browser = sovereign
+        ? await api.request<BrowserSession>("/api/rhodiz-browser/sessions", {})
+        : await api.request<BrowserSession>("/api/browsers", { url: target });
       await refresh();
       setUrl("");
-      open({ type: "browser", browser });
+      open({ type: "browser", browser: sovereign ? { ...browser, url: target } : browser });
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -863,7 +866,7 @@ export function BrowserScreen() {
             onChangeText={setUrl}
             onSubmitEditing={() => void create()}
             autoCapitalize="none"
-            placeholder={sovereign ? "RHODIZ takeover is not enabled yet" : "https://example.com"}
+            placeholder="https://example.com"
             placeholderTextColor={colors.muted}
             style={[s.input, { flex: 1 }]}
           />
@@ -871,10 +874,10 @@ export function BrowserScreen() {
             primary
             icon={Plus}
             busy={busy}
-            disabled={sovereign || !url.trim()}
+            disabled={!url.trim()}
             onPress={() => void create()}
           >
-            {sovereign ? "RHODIZ takeover pending" : "Open session"}
+            {sovereign ? "Create RHODIZ session" : "Open session"}
           </Button>
         </View>
         <ErrorNotice error={error} />
@@ -885,10 +888,7 @@ export function BrowserScreen() {
           w.browsers.map((b) => (
             <Pressable
               key={b.id}
-              disabled={sovereign}
-              onPress={() => {
-                if (!sovereign) open({ type: "browser", browser: b });
-              }}
+              onPress={() => open({ type: "browser", browser: b })}
               style={{
                 borderTopWidth: 1,
                 borderTopColor: colors.line,
@@ -932,7 +932,7 @@ export function BrowserScreen() {
             title={sovereign ? "No active RHODIZ browser sessions" : "Start with a website"}
             detail={
               sovereign
-                ? "Ask RHODIZ to browse after canonical takeover/action controls are enabled. OpenMuse does not create a parallel browser session."
+                ? "Create a RHODIZ session above. Navigation will require an explicit one-shot Action Fabric confirmation."
                 : "Open a session above to keep your browsing together. Live previews appear when the browser worker is configured."
             }
           />
