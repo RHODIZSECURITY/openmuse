@@ -12,8 +12,7 @@ import { ConversationAgent } from "./engine/conversation.ts";
 import type { AgentService } from "./engine/service.ts";
 
 export function aguiHeaders(config: Config, authorization?: string): Record<string, string> {
-  if (config.authBackend === "rhodiz")
-    return authorization ? { Authorization: authorization } : {};
+  if (config.authBackend === "rhodiz") return authorization ? { Authorization: authorization } : {};
   return config.agentToken ? { Authorization: `Bearer ${config.agentToken}` } : {};
 }
 
