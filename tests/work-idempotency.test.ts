@@ -98,10 +98,7 @@ test("file operation identity isolates owner, input and independent requests", a
     "task-fill",
   );
   assert.equal(reordered.id, first.id);
-  assert.notEqual(
-    (await server.files.fill(owner, source.id, fields, "another-task")).id,
-    first.id,
-  );
+  assert.notEqual((await server.files.fill(owner, source.id, fields, "another-task")).id, first.id);
   assert.notEqual(
     (
       await server.files.fill(
@@ -125,16 +122,8 @@ test("file operation identity isolates owner, input and independent requests", a
     "owner-scoped",
   );
   assert.notEqual(
-    (
-      await server.files.import(
-        owner,
-        "sample.pdf",
-        bytes,
-        "fixture",
-        undefined,
-        "owner-scoped",
-      )
-    ).id,
+    (await server.files.import(owner, "sample.pdf", bytes, "fixture", undefined, "owner-scoped"))
+      .id,
     otherOwner.id,
   );
 });
@@ -188,10 +177,7 @@ test("document retry reuses its filled PDF after task checkpoint loss", async (t
   const resumed = await server.agent.getTask(owner, task.id);
   assert.equal(resumed.status, "waiting_approval", resumed.error ?? resumed.question);
   assert.equal(resumed.state.filledId, outputs[0].id);
-  assert.equal(
-    (await db.list<Artifact>(owner, "files")).filter((file) => file.parentId).length,
-    1,
-  );
+  assert.equal((await db.list<Artifact>(owner, "files")).filter((file) => file.parentId).length, 1);
 });
 
 test("attachment import recovers after mapping loss and isolates reconnections", async (t) => {
