@@ -7,6 +7,11 @@ import type {
   AgentNotification,
 } from "../../../../packages/domain/src/agent.ts";
 import { AppError } from "../errors.ts";
+import {
+  rhodizCreateMemory,
+  rhodizExperienceProjection,
+  rhodizForgetMemory,
+} from "../rhodiz.ts";
 import type { AgentService } from "./service.ts";
 
 const text = z.string().trim().min(1).max(4000);
@@ -27,7 +32,25 @@ const goalPatchSchema = z.object({
 
 export function agentRoutes(service: AgentService): Hono<{ Variables: { owner: string } }> {
   const app = new Hono<{ Variables: { owner: string } }>();
-  app.get("/", async (c) => c.json(await service.snapshot(c.get("owner"))));
+  app.get("/", async (c) => {
+    const snapshot = await service.snapshot(c.get("owner"));
+    if (service.config.authBackend !== "rhodiz") return c.json(snapshot);
+    const projection = await rhodizExperienceProjection(
+      service.config,
+      c.req.header("authorization"),
+    );
+    return c.json({
+      ...snapshot,
+      identity: projection.identity,
+      memories: projection.memories,
+      authority: {
+        identity: "rhodiz",
+        memory: "rhodiz",
+        identityMutable: false,
+        memoryEditable: false,
+      },
+    });
+  });
   app.post("/tasks", async (c) =>
     c.json(await service.createTask(c.get("owner"), await c.req.json()), 201),
   );
@@ -83,6 +106,22 @@ export function agentRoutes(service: AgentService): Hono<{ Variables: { owner: s
   });
   app.post("/memories", async (c) => {
     const body = memorySchema.parse(await c.req.json());
+    if (service.config.authBackend === "rhodiz") {
+      const result = await rhodizCreateMemory(
+        service.config,
+        c.req.header("authorization"),
+        body.text,
+      );
+      return c.json(
+        {
+          id: result.id,
+          text: body.text,
+          source: "MemoryOS · manual",
+          createdAt: new Date().toISOString(),
+        },
+        201,
+      );
+    }
     const memory: AgentMemory = {
       id: randomUUID(),
       text: body.text,
@@ -93,6 +132,8 @@ export function agentRoutes(service: AgentService): Hono<{ Variables: { owner: s
   });
   app.post("/memories/:id", async (c) => {
     const body = memorySchema.parse(await c.req.json());
+    if (service.config.authBackend === "rhodiz")
+      throw new AppError("Edit this memory in RHODIZ MemoryOS; in-place correction is not exposed here.", 409);
     const memory = await service.db.compareAndSwap<AgentMemory>(
       c.get("owner"),
       "memories",
@@ -104,6 +145,17 @@ export function agentRoutes(service: AgentService): Hono<{ Variables: { owner: s
     return c.json(memory);
   });
   app.post("/memories/:id/forget", async (c) => {
+    if (service.config.authBackend === "rhodiz") {
+      const body = z.object({ version: z.number().int().min(1) }).parse(await c.req.json());
+      return c.json(
+        await rhodizForgetMemory(
+          service.config,
+          c.req.header("authorization"),
+          c.req.param("id"),
+          body.version,
+        ),
+      );
+    }
     if (!(await service.db.take(c.get("owner"), "memories", c.req.param("id"))))
       throw new AppError("Memory not found", 404);
     return c.json({ ok: true });
@@ -117,6 +169,8 @@ export function agentRoutes(service: AgentService): Hono<{ Variables: { owner: s
         showChatUpdates: z.boolean().optional(),
       })
       .parse(await c.req.json());
+    if (service.config.authBackend === "rhodiz")
+      throw new AppError("RHODIZ IA identity is canonical and cannot be replaced by OpenMuse.", 409);
     const owner = c.get("owner");
     await service.ensure(owner);
     const identity = await service.db.compareAndSwap<AgentIdentity>(
