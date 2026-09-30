@@ -207,14 +207,14 @@ export function ComputerSheet() {
         <View style={[s.row, { gap: 8 }]}>
           {(sovereign ? (["Browser"] as const) : (["Browser", "Terminal", "Files"] as const)).map(
             (item) => (
-            <Button
-              key={item}
-              primary={tab === item}
-              icon={item === "Browser" ? Globe2 : item === "Terminal" ? Terminal : FolderOpen}
-              onPress={() => setTab(item)}
-            >
-              {item}
-            </Button>
+              <Button
+                key={item}
+                primary={tab === item}
+                icon={item === "Browser" ? Globe2 : item === "Terminal" ? Terminal : FolderOpen}
+                onPress={() => setTab(item)}
+              >
+                {item}
+              </Button>
             ),
           )}
         </View>
