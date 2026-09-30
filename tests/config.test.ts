@@ -57,4 +57,3 @@ test("RHODIZ sovereign live configuration remains Intelligence-key-free", () => 
     assert.doesNotThrow(() => assertApiDeploymentConfig({ ...rhodiz, intelligenceApiKey: key }));
   }
 });
-
