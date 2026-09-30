@@ -1350,8 +1350,14 @@ export function ConnectionsScreen({ query = "" }: { query?: string }) {
                 }
               />
               <SettingsLine
-                label="Rich Threads"
-                value={w.runtime.richThreads ? "CopilotKit Intelligence" : "Not connected"}
+                label="Conversation history"
+                value={
+                  w.runtime.conversationStore === "rhodiz"
+                    ? "RHODIZ canonical"
+                    : w.runtime.richThreads
+                      ? "CopilotKit Intelligence"
+                      : "Local workspace"
+                }
               />
               <Button
                 small
