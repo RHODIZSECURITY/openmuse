@@ -19,7 +19,11 @@ import { AgentService } from "./engine/service.ts";
 import { AppError } from "./errors.ts";
 import { Files } from "./files.ts";
 import { GoogleAuth } from "./google-auth.ts";
-import { rhodizBrowserState } from "./rhodiz-browser.ts";
+import {
+  rhodizBrowserPreview,
+  rhodizBrowserSessions,
+  rhodizBrowserState,
+} from "./rhodiz-browser.ts";
 import { WorkspaceService } from "./workspace.ts";
 
 export async function createApp(
@@ -157,8 +161,10 @@ export async function createApp(
   app.get("/api/workspace", async (c) => {
     const snapshot = await workspace.snapshot(c.get("owner"), c.req.query("q"));
     if (config.authBackend === "rhodiz") {
-      const state = await rhodizBrowserState(config, c.req.header("authorization"));
-      snapshot.browsers = [];
+      const authorization = c.req.header("authorization");
+      const state = await rhodizBrowserState(config, authorization);
+      snapshot.browsers =
+        state === "connected" ? await rhodizBrowserSessions(config, authorization) : [];
       snapshot.runtime.browserBackend = "rhodiz";
       snapshot.runtime.browserStatus = state;
       const connection = snapshot.connections.find((item) => item.id === "browser");
@@ -182,6 +188,18 @@ export async function createApp(
     return c.json(snapshot);
   });
   app.route("/api/agent", agentRoutes(agent));
+  app.get("/api/rhodiz-browser/:id/preview", async (c) => {
+    if (config.authBackend !== "rhodiz") throw new AppError("Not found", 404);
+    const bytes = await rhodizBrowserPreview(
+      config,
+      c.req.header("authorization"),
+      c.req.param("id"),
+    );
+    c.header("Content-Type", "image/png");
+    c.header("Content-Length", String(bytes.byteLength));
+    c.header("Cache-Control", "no-store");
+    return c.body(bytes);
+  });
   app.route("/api/computer", computerRoutes(computer, files));
   app.get("/api/calendars", async (c) => c.json(await workspace.calendars(c.get("owner"))));
   app.get("/api/calendar/events", async (c) => {
