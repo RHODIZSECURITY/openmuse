@@ -40,7 +40,11 @@ const missingIntelligenceKeyMessage =
   "See https://docs.copilotkit.ai/intelligence/connect-your-runtime";
 
 export function assertApiDeploymentConfig(config: Config): void {
-  if (config.mode === "live" && !config.intelligenceApiKey?.trim()) {
+  if (
+    config.mode === "live" &&
+    config.authBackend !== "rhodiz" &&
+    !config.intelligenceApiKey?.trim()
+  ) {
     throw new Error(missingIntelligenceKeyMessage);
   }
 }
