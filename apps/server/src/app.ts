@@ -93,6 +93,7 @@ export async function createApp(
     c.json({
       ok: true,
       mode: config.mode,
+      authBackend: config.authBackend,
       agentConfigured: agentConfigured(config),
       browserConfigured: Boolean(config.workerUrl && config.workerToken),
     }),
@@ -106,12 +107,21 @@ export async function createApp(
     }
     if (++loginAttempts > 30)
       throw new AppError("Too many sign-in attempts. Try again in a minute.", 429);
-    const body = z.object({ accessKey: z.string().optional() }).parse(await c.req.json());
-    const session = await auth.session(body.accessKey);
-    await workspace.ensureSample("local-user", actions);
-    await agent.ensure("local-user");
-    if (config.mode === "sample") await agent.refreshIdeas("local-user");
-    return c.json(session);
+    const body = z
+      .object({
+        accessKey: z.string().optional(),
+        usuario: z.string().max(120).optional(),
+        password: z.string().max(256).optional(),
+        dispositivo: z.string().max(120).optional(),
+      })
+      .parse(await c.req.json());
+    const session = await auth.session(body);
+    if (config.authBackend === "local") {
+      await workspace.ensureSample(session.owner, actions);
+      await agent.ensure(session.owner);
+      if (config.mode === "sample") await agent.refreshIdeas(session.owner);
+    }
+    return c.json({ token: session.token, mode: session.mode });
   });
   app.get("/api/google/callback", async (c) => {
     if (c.req.query("error"))
