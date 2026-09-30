@@ -128,6 +128,12 @@ test("RHODIZ conversation history stays canonical and local conversation writes 
         assert.equal(requestHeaders.get("authorization"), null);
         return Response.json({ configurado: true, disponible: true });
       }
+      if (url === "http://rhodiz.internal/api/rhodiz/computer/sesiones") {
+        const requestHeaders = new Headers(init?.headers);
+        assert.equal(requestHeaders.get("x-rhodiz-token"), "canonical-bearer");
+        assert.equal(requestHeaders.get("authorization"), null);
+        return Response.json({ sessions: [] });
+      }
       throw new Error(`unexpected fetch: ${url}`);
     });
 
