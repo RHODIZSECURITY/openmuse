@@ -1770,8 +1770,7 @@ export function AppsScreen() {
                 <Mascot size={70} variant={data?.identity.avatar || "sky"} />
                 <Text style={s.heading}>{data?.identity.name || "RHODIZ IA"}</Text>
                 <Text style={[s.muted, { textAlign: "center" }]}>
-                  Identity is owned by RHODIZ. OpenMuse can present it, but cannot rename or
-                  replace the canonical assistant.
+                  RHODIZ owns this identity. OpenMuse only presents the canonical assistant.
                 </Text>
               </View>
             ) : (
