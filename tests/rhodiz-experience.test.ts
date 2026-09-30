@@ -113,7 +113,7 @@ test("RHODIZ Experience projects canonical identity and MemoryOS without local d
     (call) => call.url.endsWith("/api/memoria/recuerdos") && call.init?.method === "POST",
   );
   assert.ok(createCall);
-  assert.equal(new Headers(createCall.init?.headers).get("authorization"), "Bearer canonical-bearer");
+  assert.equal(\n    new Headers(createCall.init?.headers).get("authorization"),\n    "Bearer canonical-bearer",\n  );
   assert.equal(new Headers(createCall.init?.headers).get("x-rhodiz-token"), "canonical-bearer");
   assert.deepEqual(JSON.parse(String(createCall.init?.body)), {
     tipo: "manual",
@@ -129,7 +129,7 @@ test("RHODIZ Experience projects canonical identity and MemoryOS without local d
   });
   assert.equal(forget.status, 200);
   const forgetCall = calls.find(
-    (call) => call.url.includes("/api/memoria/recuerdos/memory-1?") && call.init?.method === "DELETE",
+    (call) =>\n      call.url.includes("/api/memoria/recuerdos/memory-1?") && call.init?.method === "DELETE",
   );
   assert.ok(forgetCall);
   assert.match(forgetCall.url, /version_esperada=3/);
