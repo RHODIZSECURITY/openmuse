@@ -13,7 +13,11 @@ const sessionsSchema = z.object({
   sessions: z
     .array(
       z.object({
-        id: z.string().min(1).max(128).regex(/^[A-Za-z0-9_-]+$/),
+        id: z
+          .string()
+          .min(1)
+          .max(128)
+          .regex(/^[A-Za-z0-9_-]+$/),
         title: z.string().max(500),
         url: z.string().max(4096),
         status: z.enum(["active", "idle"]),
@@ -26,7 +30,11 @@ const sessionsSchema = z.object({
 const previewSchema = z.object({
   mime: z.literal("image/png"),
   base64: z.string().max(16 * 1024 * 1024),
-  bytes: z.number().int().min(0).max(12 * 1024 * 1024),
+  bytes: z
+    .number()
+    .int()
+    .min(0)
+    .max(12 * 1024 * 1024),
 });
 
 function bearerToken(authorization?: string): string {
@@ -61,7 +69,6 @@ export async function rhodizBrowserState(
   if (!payload.data.configurado) return "disabled";
   return payload.data.disponible ? "connected" : "offline";
 }
-
 
 function rhodizHeaders(authorization?: string): Record<string, string> {
   return { "x-rhodiz-token": bearerToken(authorization) };
@@ -106,7 +113,12 @@ export async function rhodizBrowserPreview(
 ): Promise<Buffer> {
   if (config.authBackend !== "rhodiz" || !config.rhodizApiUrl)
     throw new AppError("RHODIZ browser is not configured", 503);
-  const safeId = z.string().min(1).max(128).regex(/^[A-Za-z0-9_-]+$/).parse(sessionId);
+  const safeId = z
+    .string()
+    .min(1)
+    .max(128)
+    .regex(/^[A-Za-z0-9_-]+$/)
+    .parse(sessionId);
   let response: Response;
   try {
     response = await fetch(
@@ -127,10 +139,7 @@ export async function rhodizBrowserPreview(
 
   const parsed = previewSchema.safeParse(await response.json().catch(() => null));
   if (!parsed.success) throw new AppError("RHODIZ browser returned an invalid preview", 502);
-  if (
-    parsed.data.base64.length % 4 !== 0 ||
-    !/^[A-Za-z0-9+/]*={0,2}$/.test(parsed.data.base64)
-  )
+  if (parsed.data.base64.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(parsed.data.base64))
     throw new AppError("RHODIZ browser returned invalid preview encoding", 502);
   const bytes = Buffer.from(parsed.data.base64, "base64");
   if (bytes.length !== parsed.data.bytes)
