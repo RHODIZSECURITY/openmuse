@@ -19,6 +19,7 @@ import { AgentService } from "./engine/service.ts";
 import { AppError } from "./errors.ts";
 import { Files } from "./files.ts";
 import { GoogleAuth } from "./google-auth.ts";
+import { rhodizBrowserState } from "./rhodiz-browser.ts";
 import { WorkspaceService } from "./workspace.ts";
 
 export async function createApp(
@@ -137,6 +138,7 @@ export async function createApp(
   });
   app.use("/api/*", async (c, next) => {
     const signedRoute =
+      config.authBackend !== "rhodiz" &&
       /^\/api\/files\/[^/]+\/content$|^\/api\/browsers\/[^/]+\/(?:preview|console)$/.test(
         c.req.path,
       );
@@ -145,11 +147,37 @@ export async function createApp(
         ? auth.verify(new URL(c.req.url))
         : await auth.owner(c.req.header("authorization"));
     c.set("owner", owner);
+    if (
+      config.authBackend === "rhodiz" &&
+      /^\/api\/(?:browsers|computer)(?:\/|$)/.test(c.req.path)
+    )
+      throw new AppError(
+        "OpenMuse local Computer/browser effects are disabled in RHODIZ mode. RHODIZ Action Fabric remains authoritative.",
+        409,
+      );
     await next();
   });
   app.get("/api/workspace", async (c) => {
     const snapshot = await workspace.snapshot(c.get("owner"), c.req.query("q"));
-    snapshot.browsers = snapshot.browsers.map((s) => browser.decorate(c.get("owner"), s));
+    if (config.authBackend === "rhodiz") {
+      const state = await rhodizBrowserState(config, c.req.header("authorization"));
+      snapshot.browsers = [];
+      snapshot.runtime.browserBackend = "rhodiz";
+      snapshot.runtime.browserStatus = state;
+      const connection = snapshot.connections.find((item) => item.id === "browser");
+      if (connection) {
+        connection.status =
+          state === "connected" ? "connected" : state === "disabled" ? "unconfigured" : "disconnected";
+        connection.capabilities = [
+          "RHODIZ browser_agent",
+          "RHODIZ Policy / Action Fabric",
+          "HMAC anti-replay",
+          "SSRF-safe browsing",
+        ];
+      }
+    } else {
+      snapshot.browsers = snapshot.browsers.map((s) => browser.decorate(c.get("owner"), s));
+    }
     return c.json(snapshot);
   });
   app.route("/api/agent", agentRoutes(agent));
