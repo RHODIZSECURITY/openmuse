@@ -30,13 +30,30 @@ export class MuseApi {
   }
 }
 
+export type SessionCredentials = {
+  accessKey?: string;
+  usuario?: string;
+  password?: string;
+  dispositivo?: string;
+};
+
+export async function serverInfo(): Promise<{
+  mode: "sample" | "live";
+  authBackend: "local" | "rhodiz";
+}> {
+  const response = await fetch(`${API_URL}/api/health`);
+  const payload = await response.json();
+  if (!response.ok) throw new Error(payload.error || "Could not reach the OpenMuse server.");
+  return payload;
+}
+
 export async function createSession(
-  accessKey?: string,
+  credentials: SessionCredentials = {},
 ): Promise<{ token: string; mode: "sample" | "live" }> {
   const response = await fetch(`${API_URL}/api/session`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ accessKey }),
+    body: JSON.stringify(credentials),
   });
   const payload = await response.json();
   if (!response.ok) throw new Error(payload.error || "Could not open your workspace.");
