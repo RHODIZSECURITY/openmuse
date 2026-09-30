@@ -2,6 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { Config } from "../apps/server/src/config.ts";
 import {
+  rhodizBrowserAction,
+  rhodizBrowserClose,
+  rhodizBrowserCreate,
+  rhodizBrowserNavigate,
   rhodizBrowserPreview,
   rhodizBrowserSessions,
   rhodizBrowserState,
@@ -138,5 +142,125 @@ test("RHODIZ browser sessions reject malformed canonical payloads", async (t) =>
   await assert.rejects(
     rhodizBrowserSessions(config, "Bearer canonical-bearer"),
     /invalid session list/,
+  );
+});
+
+
+test("RHODIZ browser create stays canonical and resolves the owned session", async (t) => {
+  let calls = 0;
+  t.mock.method(globalThis, "fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+    calls += 1;
+    const url = String(input);
+    const headers = new Headers(init?.headers);
+    assert.equal(headers.get("x-rhodiz-token"), "canonical-bearer");
+    assert.equal(headers.get("authorization"), null);
+    if (calls === 1) {
+      assert.equal(url, "http://rhodiz.internal/api/rhodiz/computer/sesiones");
+      assert.equal(init?.method, "POST");
+      assert.deepEqual(JSON.parse(String(init?.body)), { locale: "es-ES" });
+      return Response.json({ id: "session_2", created: 1700000020 });
+    }
+    assert.equal(url, "http://rhodiz.internal/api/rhodiz/computer/sesiones");
+    return Response.json({
+      sessions: [
+        {
+          id: "session_2",
+          title: "New session",
+          url: "about:blank",
+          status: "active",
+          created: 1700000020,
+          touched: 1700000021,
+        },
+      ],
+    });
+  });
+
+  const created = await rhodizBrowserCreate(config, "Bearer canonical-bearer", {
+    locale: "es-ES",
+  });
+  assert.equal(created.id, "session_2");
+  assert.equal(created.title, "New session");
+  assert.equal(created.previewUrl, "/api/rhodiz-browser/session_2/preview");
+});
+
+test("RHODIZ navigation relays one-shot confirmation ticket without claiming authority", async (t) => {
+  const requests: Array<{ headers: Headers; body: unknown }> = [];
+  t.mock.method(globalThis, "fetch", async (_input: RequestInfo | URL, init?: RequestInit) => {
+    const headers = new Headers(init?.headers);
+    requests.push({ headers, body: JSON.parse(String(init?.body)) });
+    if (requests.length === 1)
+      return Response.json({
+        confirmacion_requerida: true,
+        ticket: "one-shot-ticket",
+        accion: "navegar",
+      });
+    return Response.json({ url: "https://example.com/", title: "Example" });
+  });
+
+  const first = await rhodizBrowserNavigate(config, "Bearer canonical-bearer", "session_1", {
+    url: "https://example.com/",
+  });
+  assert.deepEqual(first, {
+    confirmacion_requerida: true,
+    ticket: "one-shot-ticket",
+    accion: "navegar",
+  });
+  assert.equal(requests[0].headers.get("x-rhodiz-ticket"), null);
+  assert.equal(requests[0].headers.get("x-rhodiz-token"), "canonical-bearer");
+
+  const second = await rhodizBrowserNavigate(config, "Bearer canonical-bearer", "session_1", {
+    url: "https://example.com/",
+    ticket: "one-shot-ticket",
+  });
+  assert.equal("confirmacion_requerida" in second, false);
+  assert.equal(requests[1].headers.get("x-rhodiz-ticket"), "one-shot-ticket");
+  assert.equal(requests[1].headers.get("x-rhodiz-token"), "canonical-bearer");
+  assert.deepEqual(requests[1].body, { url: "https://example.com/" });
+});
+
+test("RHODIZ sensitive browser actions preserve ticket semantics", async (t) => {
+  const tickets: Array<string | null> = [];
+  t.mock.method(globalThis, "fetch", async (_input: RequestInfo | URL, init?: RequestInit) => {
+    const headers = new Headers(init?.headers);
+    tickets.push(headers.get("x-rhodiz-ticket"));
+    if (tickets.length === 1)
+      return Response.json({
+        confirmacion_requerida: true,
+        ticket: "click-ticket",
+        accion: "click",
+      });
+    return Response.json({ ok: true, url: "https://example.com/", title: "Example" });
+  });
+
+  const first = await rhodizBrowserAction(config, "Bearer canonical-bearer", "session_1", {
+    action: "click",
+    selector: "#submit",
+  });
+  assert.equal("confirmacion_requerida" in first, true);
+  const second = await rhodizBrowserAction(config, "Bearer canonical-bearer", "session_1", {
+    action: "click",
+    selector: "#submit",
+    ticket: "click-ticket",
+  });
+  assert.equal("confirmacion_requerida" in second, false);
+  assert.deepEqual(tickets, [null, "click-ticket"]);
+});
+
+test("RHODIZ browser close never falls back to the OpenMuse worker", async (t) => {
+  t.mock.method(globalThis, "fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+    assert.equal(
+      String(input),
+      "http://rhodiz.internal/api/rhodiz/computer/sesiones/session_1",
+    );
+    assert.equal(init?.method, "DELETE");
+    const headers = new Headers(init?.headers);
+    assert.equal(headers.get("x-rhodiz-token"), "canonical-bearer");
+    assert.equal(headers.get("authorization"), null);
+    return Response.json({ closed: true });
+  });
+
+  assert.deepEqual(
+    await rhodizBrowserClose(config, "Bearer canonical-bearer", "session_1"),
+    { closed: true },
   );
 });
