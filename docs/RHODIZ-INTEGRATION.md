@@ -65,6 +65,14 @@ The RHODIZ-auth slice is covered by tests that verify:
 - AG-UI forwards the verified per-user bearer and does not fall back to a static agent token;
 - legacy/local OpenMuse authentication behavior remains supported when `AUTH_BACKEND` is unset or `local`;
 - RHODIZ hydration returns canonical messages while local `PUT /api/conversation` persistence is not used;
+- the proxy rejects history payloads that do not assert `canonical: "rhodiz"`;
 - a configured CopilotKit Intelligence key cannot enable Rich Threads ownership in RHODIZ mode.
+
+## Slice provenance
+
+- OpenMuse upstream rechecked before this slice: `CopilotKit/openmuse@d0b3a6b3ea461bc938a5dea6c46e65eefdb1b933`.
+- Approved RHODIZ pin remains `2c83474b1a504dd5af8756225e6b461ee89aeca6`; no newer upstream code is implicitly imported.
+- RHODIZ canonical-history counterpart was reconciled against `RHODIZ-IA@1fd29075d3cf51d08c8828ed207d2f66da527e74`.
+- Work file-producing durability remains blocked on upstream OpenMuse issue #32 / PR #45 until that fix is merged, audited and revalidated.
 
 The integration remains a branch/PR candidate until its exact SHA passes the required RHODIZ gates.
