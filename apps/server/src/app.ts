@@ -273,9 +273,7 @@ export async function createApp(
       for (const message of parsed.messages) MessageSchema.parse(message);
       return c.json({ messages: parsed.messages, canonical: parsed.canonical });
     }
-    return c.json(
-      (await db.get(c.get("owner"), "conversations", "default")) ?? { messages: [] },
-    );
+    return c.json((await db.get(c.get("owner"), "conversations", "default")) ?? { messages: [] });
   });
   app.put("/api/conversation", async (c) => {
     if (config.authBackend === "rhodiz")
