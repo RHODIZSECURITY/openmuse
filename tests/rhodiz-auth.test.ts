@@ -30,7 +30,7 @@ const unusedStore = new Proxy(
 
 test("RHODIZ login returns the canonical bearer and owner without a second session", async (t) => {
   const calls: Array<{ url: string; init?: RequestInit }> = [];
-  t.mock.method(globalThis, "fetch", async (input, init) => {
+  t.mock.method(globalThis, "fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
     calls.push({ url: String(input), init });
     return Response.json({
       token: "rhodiz-session-token",
@@ -60,7 +60,7 @@ test("RHODIZ login returns the canonical bearer and owner without a second sessi
 });
 
 test("RHODIZ bearer is revalidated against the canonical session endpoint", async (t) => {
-  t.mock.method(globalThis, "fetch", async (input, init) => {
+  t.mock.method(globalThis, "fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
     assert.equal(String(input), "http://rhodiz.internal/api/rhodiz/sesion");
     assert.equal(new Headers(init?.headers).get("x-rhodiz-token"), "canonical-bearer");
     return Response.json({
