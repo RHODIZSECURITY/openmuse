@@ -54,9 +54,7 @@ test("RHODIZ sovereign live configuration remains Intelligence-key-free", () => 
     agentUrl: "http://rhodiz.internal/api/rhodiz/openmuse/agui",
   };
   for (const key of [undefined, "", " \t\n"]) {
-    assert.doesNotThrow(() =>
-      assertApiDeploymentConfig({ ...rhodiz, intelligenceApiKey: key }),
-    );
+    assert.doesNotThrow(() => assertApiDeploymentConfig({ ...rhodiz, intelligenceApiKey: key }));
   }
 });
 
