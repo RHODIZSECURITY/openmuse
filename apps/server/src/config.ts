@@ -16,7 +16,7 @@ export interface Config {
   encryptionKey?: string;
   model?: string;
   agentBackend: "sample" | "model" | "agui";
-  authBackend: "local" | "rhodiz";
+  authBackend?: "local" | "rhodiz";
   rhodizApiUrl?: string;
   agentUrl?: string;
   agentToken?: string;
