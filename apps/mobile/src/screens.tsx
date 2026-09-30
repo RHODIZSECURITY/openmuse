@@ -39,6 +39,7 @@ import type {
   EmailDraft,
 } from "../../../packages/domain/src";
 import { API_URL } from "./api";
+import { browserAddress } from "./browser-address";
 import { localDateTime, zonedInstant } from "./date-time";
 import {
   Button,
