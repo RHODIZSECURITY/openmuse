@@ -130,9 +130,7 @@ test("RHODIZ conversation history stays canonical and local conversation writes 
 
     const server = await createApp(db, {
       ...base,
-      mode: "live",
       intelligenceApiKey: "configured-but-must-not-own-history",
-      encryptionKey: "test-only",
     });
     const headers = {
       Authorization: "Bearer canonical-bearer",
