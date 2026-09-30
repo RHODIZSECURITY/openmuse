@@ -265,10 +265,13 @@ export async function createApp(
         throw new AppError("RHODIZ conversation history is unavailable", 502);
       }
       const parsed = z
-        .object({ messages: z.array(z.unknown()).max(1000) })
+        .object({
+          canonical: z.literal("rhodiz"),
+          messages: z.array(z.unknown()).max(1000),
+        })
         .parse(payload);
       for (const message of parsed.messages) MessageSchema.parse(message);
-      return c.json({ messages: parsed.messages, canonical: "rhodiz" });
+      return c.json({ messages: parsed.messages, canonical: parsed.canonical });
     }
     return c.json(
       (await db.get(c.get("owner"), "conversations", "default")) ?? { messages: [] },
