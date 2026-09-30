@@ -286,14 +286,20 @@ export function ThreadsSheet({ onClose }: { onClose: () => void }) {
             <LinkRow
               icon={MessageCircle}
               title="Main chat"
-              detail="Saved in this workspace"
+              detail={
+                workspace.runtime.conversationStore === "rhodiz"
+                  ? "Saved by RHODIZ"
+                  : "Saved in this workspace"
+              }
               onPress={() => {
                 navigate("chat");
                 onClose();
               }}
             />
             <Text style={s.muted}>
-              Your conversation is saved in this workspace. You can manage connections in Apps.
+              {workspace.runtime.conversationStore === "rhodiz"
+                ? "Conversation history is read from RHODIZ. OpenMuse does not persist a local copy."
+                : "Your conversation is saved in this workspace. You can manage connections in Apps."}
             </Text>
           </>
         )}
