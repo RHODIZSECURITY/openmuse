@@ -190,13 +190,24 @@ async function rhodizBrowserCommand(
   if (response.status === 403)
     throw new AppError("This RHODIZ account cannot use Computer-use", 403);
   if (response.status === 404) throw new AppError("RHODIZ browser session not found", 404);
-  if (!response.ok)
+  if (!response.ok) {
+    let status: 400 | 409 | 413 | 422 | 429 | 502 | 503 = 502;
+    if (response.status >= 500) status = 503;
+    else if (
+      response.status === 400 ||
+      response.status === 409 ||
+      response.status === 413 ||
+      response.status === 422 ||
+      response.status === 429
+    )
+      status = response.status;
     throw new AppError(
       typeof payload === "object" && payload && "detail" in payload
         ? String((payload as { detail?: unknown }).detail ?? "RHODIZ browser command failed")
         : "RHODIZ browser command failed",
-      response.status >= 500 ? 503 : response.status,
+      status,
     );
+  }
   return payload;
 }
 
