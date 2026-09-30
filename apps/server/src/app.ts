@@ -20,6 +20,10 @@ import { AppError } from "./errors.ts";
 import { Files } from "./files.ts";
 import { GoogleAuth } from "./google-auth.ts";
 import {
+  rhodizBrowserAction,
+  rhodizBrowserClose,
+  rhodizBrowserCreate,
+  rhodizBrowserNavigate,
   rhodizBrowserPreview,
   rhodizBrowserSessions,
   rhodizBrowserState,
@@ -188,6 +192,73 @@ export async function createApp(
     return c.json(snapshot);
   });
   app.route("/api/agent", agentRoutes(agent));
+  app.post("/api/rhodiz-browser/sessions", async (c) => {
+    if (config.authBackend !== "rhodiz") throw new AppError("Not found", 404);
+    const input = z
+      .object({
+        viewport_width: z.number().int().min(320).max(3840).optional(),
+        viewport_height: z.number().int().min(240).max(2160).optional(),
+        locale: z.string().min(1).max(30).optional(),
+      })
+      .parse(await c.req.json());
+    return c.json(
+      await rhodizBrowserCreate(config, c.req.header("authorization"), input),
+      201,
+    );
+  });
+  app.post("/api/rhodiz-browser/:id/navigate", async (c) => {
+    if (config.authBackend !== "rhodiz") throw new AppError("Not found", 404);
+    const input = z
+      .object({ url: z.url().max(4096), ticket: z.string().min(1).max(8192).optional() })
+      .parse(await c.req.json());
+    return c.json(
+      await rhodizBrowserNavigate(
+        config,
+        c.req.header("authorization"),
+        c.req.param("id"),
+        input,
+      ),
+    );
+  });
+  app.post("/api/rhodiz-browser/:id/action", async (c) => {
+    if (config.authBackend !== "rhodiz") throw new AppError("Not found", 404);
+    const input = z
+      .object({
+        action: z.enum([
+          "click",
+          "fill",
+          "press",
+          "select",
+          "scroll",
+          "wait",
+          "back",
+          "forward",
+          "reload",
+        ]),
+        selector: z.string().max(2000).optional(),
+        value: z.string().max(20000).optional(),
+        key: z.string().max(100).optional(),
+        x: z.number().int().optional(),
+        y: z.number().int().optional(),
+        timeout_ms: z.number().int().min(500).max(60000).optional(),
+        ticket: z.string().min(1).max(8192).optional(),
+      })
+      .parse(await c.req.json());
+    return c.json(
+      await rhodizBrowserAction(
+        config,
+        c.req.header("authorization"),
+        c.req.param("id"),
+        input,
+      ),
+    );
+  });
+  app.post("/api/rhodiz-browser/:id/close", async (c) => {
+    if (config.authBackend !== "rhodiz") throw new AppError("Not found", 404);
+    return c.json(
+      await rhodizBrowserClose(config, c.req.header("authorization"), c.req.param("id")),
+    );
+  });
   app.get("/api/rhodiz-browser/:id/preview", async (c) => {
     if (config.authBackend !== "rhodiz") throw new AppError("Not found", 404);
     const bytes = await rhodizBrowserPreview(
