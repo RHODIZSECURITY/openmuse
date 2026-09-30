@@ -71,10 +71,7 @@ test("RHODIZ bearer is revalidated against the canonical session endpoint", asyn
   });
 
   const auth = new Auth(unusedStore, base, "unused-signing-key");
-  assert.equal(
-    await auth.owner("Bearer canonical-bearer"),
-    "9c3d22bc-1f50-4a67-b413-a589593abf77",
-  );
+  assert.equal(await auth.owner("Bearer canonical-bearer"), "9c3d22bc-1f50-4a67-b413-a589593abf77");
 });
 
 test("RHODIZ auth fails closed when canonical validation rejects the bearer", async (t) => {
