@@ -117,14 +117,9 @@ export function BrowserThreadCard({ browser }: { browser: BrowserSession }) {
           </Text>
         </View>
       )}
-      <Button
-        disabled={sovereign}
-        onPress={() => {
-          if (!sovereign) open({ type: "browser", browser });
-        }}
-      >
+      <Button onPress={() => open({ type: "browser", browser })}>
         {sovereign
-          ? "Read-only RHODIZ preview"
+          ? "Open RHODIZ takeover"
           : browser.status === "closed"
             ? "Reopen browser"
             : browser.status === "error"
@@ -160,15 +155,16 @@ export function ComputerSheet() {
     };
   }, [refresh]);
   async function create() {
-    if (busy || !url.trim()) return;
+    if (busy || !available || !url.trim()) return;
     setBusy(true);
     setError("");
     try {
-      const browser = await api.request<BrowserSession>("/api/browsers", {
-        url: browserAddress(url),
-      });
+      const target = browserAddress(url);
+      const browser = sovereign
+        ? await api.request<BrowserSession>("/api/rhodiz-browser/sessions", {})
+        : await api.request<BrowserSession>("/api/browsers", { url: target });
       await refresh();
-      open({ type: "browser", browser });
+      open({ type: "browser", browser: sovereign ? { ...browser, url: target } : browser });
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -202,7 +198,7 @@ export function ComputerSheet() {
               <Text style={s.muted}>
                 {sovereign
                   ? available
-                    ? "The canonical RHODIZ browser is healthy. Interactive control stays locked until its Action Fabric ticket adapter is enabled."
+                    ? "The canonical RHODIZ browser is healthy. Navigation is gated by one-shot RHODIZ Action Fabric confirmation tickets."
                     : browserStatus === "forbidden"
                       ? "This RHODIZ account is not authorized for Computer-use."
                       : browserStatus === "disabled"
@@ -249,10 +245,10 @@ export function ComputerSheet() {
                 primary
                 icon={Plus}
                 busy={busy}
-                disabled={sovereign || !available || !url.trim()}
+                disabled={!available || !url.trim()}
                 onPress={() => void create()}
               >
-                {sovereign ? "RHODIZ browser control pending" : "Open a browser session"}
+                {sovereign ? "Create RHODIZ session" : "Open a browser session"}
               </Button>
             </View>
             {[...workspace.browsers]
@@ -268,7 +264,7 @@ export function ComputerSheet() {
             )}
             <Text style={s.small}>
               {sovereign
-                ? "Browser state comes from RHODIZ. OpenMuse does not own sessions or authorize browser effects in sovereign mode."
+                ? "Browser state and effects come from RHODIZ. OpenMuse relays explicit confirmation tickets but never authorizes an effect itself."
                 : "Browsing sessions keep their own logins and downloads. Open one to take over, then return to your conversation."}
             </Text>
           </>
