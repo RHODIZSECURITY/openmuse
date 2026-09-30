@@ -21,6 +21,7 @@ export function ComputerEntry() {
   const available = workspace.connections.some(
     (c) => c.id === "browser" && c.status === "connected",
   );
+  const sovereign = workspace.runtime.browserBackend === "rhodiz";
   const active = workspace.browsers.filter((b) => b.status === "active").length;
   return (
     <Pressable
@@ -42,7 +43,15 @@ export function ComputerEntry() {
       <Monitor size={13} color={colors.muted} />
       <Text style={{ fontSize: 12, color: colors.muted }}>
         Computer
-        {active ? " · take control" : available ? " · ready" : " · offline"}
+        {sovereign
+          ? available
+            ? " · RHODIZ online"
+            : " · RHODIZ offline"
+          : active
+            ? " · take control"
+            : available
+              ? " · ready"
+              : " · offline"}
       </Text>
       <View
         style={{
@@ -123,6 +132,9 @@ export function ComputerSheet() {
   const available = workspace.connections.some(
     (c) => c.id === "browser" && c.status === "connected",
   );
+  const sovereign = workspace.runtime.browserBackend === "rhodiz";
+  const browserStatus = workspace.runtime.browserStatus;
+  const effectiveTab = sovereign ? "Browser" : tab;
   useEffect(() => {
     let active = true;
     const timer = setInterval(() => {
@@ -159,23 +171,42 @@ export function ComputerSheet() {
       onClose={close}
     >
       <View style={{ gap: 20 }}>
-        {tab === "Browser" && (
+        {effectiveTab === "Browser" && (
           <View
             style={[s.row, { gap: 12, padding: 18, borderRadius: 20, backgroundColor: colors.sky }]}
           >
             <Monitor size={28} color={colors.blueDark} />
             <View style={{ flex: 1 }}>
-              <Text style={s.heading}>{available ? "Browser connected" : "Browser offline"}</Text>
+              <Text style={s.heading}>
+                {sovereign
+                  ? available
+                    ? "RHODIZ browser online"
+                    : browserStatus === "forbidden"
+                      ? "RHODIZ browser restricted"
+                      : "RHODIZ browser offline"
+                  : available
+                    ? "Browser connected"
+                    : "Browser offline"}
+              </Text>
               <Text style={s.muted}>
-                {available
-                  ? "Your agent’s browser and documents, in one place."
-                  : "Start the browser worker to connect this computer."}
+                {sovereign
+                  ? available
+                    ? "The canonical RHODIZ browser is healthy. Interactive control stays locked until its Action Fabric ticket adapter is enabled."
+                    : browserStatus === "forbidden"
+                      ? "This RHODIZ account is not authorized for Computer-use."
+                      : browserStatus === "disabled"
+                        ? "Enable RHODIZ Computer-use from its canonical Admin configuration."
+                        : "RHODIZ Computer-use is configured but its browser sidecar is unavailable."
+                  : available
+                    ? "Your agent’s browser and documents, in one place."
+                    : "Start the browser worker to connect this computer."}
               </Text>
             </View>
           </View>
         )}
         <View style={[s.row, { gap: 8 }]}>
-          {(["Browser", "Terminal", "Files"] as const).map((item) => (
+          {(sovereign ? (["Browser"] as const) : (["Browser", "Terminal", "Files"] as const)).map(
+            (item) => (
             <Button
               key={item}
               primary={tab === item}
@@ -184,13 +215,14 @@ export function ComputerSheet() {
             >
               {item}
             </Button>
-          ))}
+            ),
+          )}
         </View>
-        <View style={{ display: tab === "Browser" ? "none" : "flex" }}>
-          <LinuxWorkspace tab={tab === "Files" ? "Files" : "Terminal"} />
+        <View style={{ display: effectiveTab === "Browser" ? "none" : "flex" }}>
+          <LinuxWorkspace tab={effectiveTab === "Files" ? "Files" : "Terminal"} />
         </View>
         <ErrorNotice error={error} />
-        {tab === "Browser" ? (
+        {effectiveTab === "Browser" ? (
           <>
             <View>
               <Field
@@ -206,10 +238,10 @@ export function ComputerSheet() {
                 primary
                 icon={Plus}
                 busy={busy}
-                disabled={!available || !url.trim()}
+                disabled={sovereign || !available || !url.trim()}
                 onPress={() => void create()}
               >
-                Open a browser session
+                {sovereign ? "RHODIZ browser control pending" : "Open a browser session"}
               </Button>
             </View>
             {[...workspace.browsers]
@@ -224,8 +256,9 @@ export function ComputerSheet() {
               </Text>
             )}
             <Text style={s.small}>
-              Browsing sessions keep their own logins and downloads. Open one to take over, then
-              return to your conversation.
+              {sovereign
+                ? "Browser state comes from RHODIZ. OpenMuse does not own sessions or authorize browser effects in sovereign mode."
+                : "Browsing sessions keep their own logins and downloads. Open one to take over, then return to your conversation."}
             </Text>
           </>
         ) : tab === "Files" ? (
