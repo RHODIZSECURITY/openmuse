@@ -111,10 +111,7 @@ test("RHODIZ conversation history stays canonical and local conversation writes 
           rol: "admin",
         });
       }
-      if (
-        url ===
-        "http://rhodiz.internal/api/rhodiz/openmuse/conversation?threadId=local-main"
-      ) {
+      if (url === "http://rhodiz.internal/api/rhodiz/openmuse/conversation?threadId=local-main") {
         assert.equal(new Headers(init?.headers).get("authorization"), "Bearer canonical-bearer");
         return Response.json({
           threadId: "local-main",
@@ -161,11 +158,7 @@ test("RHODIZ conversation history stays canonical and local conversation writes 
       localWrite: false,
     });
     assert.equal(
-      await db.get(
-        "9c3d22bc-1f50-4a67-b413-a589593abf77",
-        "conversations",
-        "default",
-      ),
+      await db.get("9c3d22bc-1f50-4a67-b413-a589593abf77", "conversations", "default"),
       null,
     );
 
@@ -183,7 +176,9 @@ test("RHODIZ conversation history stays canonical and local conversation writes 
       canonical: "rhodiz",
     });
 
-    assert.ok(calls.includes("http://rhodiz.internal/api/rhodiz/openmuse/conversation?threadId=local-main"));
+    assert.ok(
+      calls.includes("http://rhodiz.internal/api/rhodiz/openmuse/conversation?threadId=local-main"),
+    );
   } finally {
     await db.close();
   }
