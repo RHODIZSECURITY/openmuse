@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { Config } from "../apps/server/src/config.ts";
-import { rhodizBrowserState } from "../apps/server/src/rhodiz-browser.ts";
+import {
+  rhodizBrowserPreview,
+  rhodizBrowserSessions,
+  rhodizBrowserState,
+} from "../apps/server/src/rhodiz-browser.ts";
 
 const config: Config = {
   mode: "sample",
@@ -51,4 +55,89 @@ test("RHODIZ browser transport failure degrades to offline", async (t) => {
     throw new Error("sidecar route unavailable");
   });
   assert.equal(await rhodizBrowserState(config, "Bearer canonical-bearer"), "offline");
+});
+
+
+test("RHODIZ browser sessions are owner-authenticated and mapped read-only", async (t) => {
+  t.mock.method(globalThis, "fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+    assert.equal(String(input), "http://rhodiz.internal/api/rhodiz/computer/sesiones");
+    const headers = new Headers(init?.headers);
+    assert.equal(headers.get("x-rhodiz-token"), "canonical-bearer");
+    assert.equal(headers.get("authorization"), null);
+    return Response.json({
+      sessions: [
+        {
+          id: "session_1",
+          title: "Example",
+          url: "https://example.com/",
+          status: "active",
+          created: 1700000000,
+          touched: 1700000010,
+        },
+      ],
+    });
+  });
+
+  assert.deepEqual(await rhodizBrowserSessions(config, "Bearer canonical-bearer"), [
+    {
+      id: "session_1",
+      title: "Example",
+      url: "https://example.com/",
+      status: "active",
+      updatedAt: new Date(1700000010000).toISOString(),
+      previewUrl: "/api/rhodiz-browser/session_1/preview",
+    },
+  ]);
+});
+
+test("RHODIZ browser preview validates PNG receipt and exact byte length", async (t) => {
+  const raw = Buffer.from("png-fixture");
+  t.mock.method(globalThis, "fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+    assert.equal(
+      String(input),
+      "http://rhodiz.internal/api/rhodiz/computer/sesiones/session_1/captura",
+    );
+    assert.equal(new Headers(init?.headers).get("x-rhodiz-token"), "canonical-bearer");
+    return Response.json({
+      mime: "image/png",
+      base64: raw.toString("base64"),
+      bytes: raw.length,
+    });
+  });
+
+  assert.deepEqual(
+    Buffer.from(await rhodizBrowserPreview(config, "Bearer canonical-bearer", "session_1")),
+    raw,
+  );
+});
+
+test("RHODIZ browser preview fails closed on malformed receipt", async (t) => {
+  t.mock.method(globalThis, "fetch", async () =>
+    Response.json({ mime: "image/png", base64: "AAAA", bytes: 999 }),
+  );
+  await assert.rejects(
+    rhodizBrowserPreview(config, "Bearer canonical-bearer", "session_1"),
+    /length did not match/,
+  );
+});
+
+test("RHODIZ browser sessions reject malformed canonical payloads", async (t) => {
+  t.mock.method(globalThis, "fetch", async () =>
+    Response.json({
+      sessions: [
+        {
+          id: "bad id!",
+          title: "bad",
+          url: "https://example.com",
+          status: "active",
+          created: 1,
+          touched: 1,
+        },
+      ],
+    }),
+  );
+  await assert.rejects(
+    rhodizBrowserSessions(config, "Bearer canonical-bearer"),
+    /invalid session list/,
+  );
 });
