@@ -932,8 +932,7 @@ function BrowserDetail({ initial }: { initial: BrowserSession }) {
     try {
       const normalized = browserAddress(url);
       const result = await api.request<
-        | BrowserSession
-        | { confirmacion_requerida: true; ticket: string; accion: string }
+        BrowserSession | { confirmacion_requerida: true; ticket: string; accion: string }
       >(`/api/rhodiz-browser/${browser.id}/navigate`, {
         url: normalized,
         ...(ticket ? { ticket } : {}),
@@ -991,12 +990,7 @@ function BrowserDetail({ initial }: { initial: BrowserSession }) {
               onSubmitEditing={() => void navigateRhodiz()}
             />
           </View>
-          <Button
-            primary
-            busy={busy}
-            disabled={!url.trim()}
-            onPress={() => void navigateRhodiz()}
-          >
+          <Button primary busy={busy} disabled={!url.trim()} onPress={() => void navigateRhodiz()}>
             Go
           </Button>
         </View>

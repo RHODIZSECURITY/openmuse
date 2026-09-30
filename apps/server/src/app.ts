@@ -201,10 +201,7 @@ export async function createApp(
         locale: z.string().min(1).max(30).optional(),
       })
       .parse(await c.req.json());
-    return c.json(
-      await rhodizBrowserCreate(config, c.req.header("authorization"), input),
-      201,
-    );
+    return c.json(await rhodizBrowserCreate(config, c.req.header("authorization"), input), 201);
   });
   app.post("/api/rhodiz-browser/:id/navigate", async (c) => {
     if (config.authBackend !== "rhodiz") throw new AppError("Not found", 404);
@@ -212,12 +209,7 @@ export async function createApp(
       .object({ url: z.url().max(4096), ticket: z.string().min(1).max(8192).optional() })
       .parse(await c.req.json());
     return c.json(
-      await rhodizBrowserNavigate(
-        config,
-        c.req.header("authorization"),
-        c.req.param("id"),
-        input,
-      ),
+      await rhodizBrowserNavigate(config, c.req.header("authorization"), c.req.param("id"), input),
     );
   });
   app.post("/api/rhodiz-browser/:id/action", async (c) => {
@@ -245,12 +237,7 @@ export async function createApp(
       })
       .parse(await c.req.json());
     return c.json(
-      await rhodizBrowserAction(
-        config,
-        c.req.header("authorization"),
-        c.req.param("id"),
-        input,
-      ),
+      await rhodizBrowserAction(config, c.req.header("authorization"), c.req.param("id"), input),
     );
   });
   app.post("/api/rhodiz-browser/:id/close", async (c) => {

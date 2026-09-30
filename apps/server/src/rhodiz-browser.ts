@@ -147,7 +147,6 @@ export async function rhodizBrowserPreview(
   return bytes;
 }
 
-
 export type RhodizBrowserConfirmation = {
   confirmacion_requerida: true;
   ticket: string;
@@ -234,9 +233,19 @@ export async function rhodizBrowserCreate(
     "POST",
     parsedInput,
   );
-  const created = z.object({ id: z.string().min(1).max(128).regex(/^[A-Za-z0-9_-]+$/) }).parse(payload);
+  const created = z
+    .object({
+      id: z
+        .string()
+        .min(1)
+        .max(128)
+        .regex(/^[A-Za-z0-9_-]+$/),
+    })
+    .parse(payload);
   const sessions = await rhodizBrowserSessions(config, authorization);
-  return sessions.find((session) => session.id === created.id) ?? browserSessionFromState(created.id, {});
+  return (
+    sessions.find((session) => session.id === created.id) ?? browserSessionFromState(created.id, {})
+  );
 }
 
 export async function rhodizBrowserNavigate(
@@ -245,7 +254,12 @@ export async function rhodizBrowserNavigate(
   sessionId: string,
   input: { url: string; ticket?: string },
 ): Promise<BrowserSession | RhodizBrowserConfirmation> {
-  const safeId = z.string().min(1).max(128).regex(/^[A-Za-z0-9_-]+$/).parse(sessionId);
+  const safeId = z
+    .string()
+    .min(1)
+    .max(128)
+    .regex(/^[A-Za-z0-9_-]+$/)
+    .parse(sessionId);
   const parsed = z
     .object({
       url: z.url().max(4096),
@@ -276,7 +290,16 @@ export async function rhodizBrowserAction(
   authorization: string | undefined,
   sessionId: string,
   input: {
-    action: "click" | "fill" | "press" | "select" | "scroll" | "wait" | "back" | "forward" | "reload";
+    action:
+      | "click"
+      | "fill"
+      | "press"
+      | "select"
+      | "scroll"
+      | "wait"
+      | "back"
+      | "forward"
+      | "reload";
     selector?: string;
     value?: string;
     key?: string;
@@ -286,10 +309,25 @@ export async function rhodizBrowserAction(
     ticket?: string;
   },
 ): Promise<BrowserSession | RhodizBrowserConfirmation> {
-  const safeId = z.string().min(1).max(128).regex(/^[A-Za-z0-9_-]+$/).parse(sessionId);
+  const safeId = z
+    .string()
+    .min(1)
+    .max(128)
+    .regex(/^[A-Za-z0-9_-]+$/)
+    .parse(sessionId);
   const parsed = z
     .object({
-      action: z.enum(["click", "fill", "press", "select", "scroll", "wait", "back", "forward", "reload"]),
+      action: z.enum([
+        "click",
+        "fill",
+        "press",
+        "select",
+        "scroll",
+        "wait",
+        "back",
+        "forward",
+        "reload",
+      ]),
       selector: z.string().max(2000).optional(),
       value: z.string().max(20000).optional(),
       key: z.string().max(100).optional(),
@@ -324,7 +362,12 @@ export async function rhodizBrowserClose(
   authorization: string | undefined,
   sessionId: string,
 ): Promise<{ closed: boolean }> {
-  const safeId = z.string().min(1).max(128).regex(/^[A-Za-z0-9_-]+$/).parse(sessionId);
+  const safeId = z
+    .string()
+    .min(1)
+    .max(128)
+    .regex(/^[A-Za-z0-9_-]+$/)
+    .parse(sessionId);
   const payload = await rhodizBrowserCommand(
     config,
     authorization,

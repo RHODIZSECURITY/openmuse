@@ -145,7 +145,6 @@ test("RHODIZ browser sessions reject malformed canonical payloads", async (t) =>
   );
 });
 
-
 test("RHODIZ browser create stays canonical and resolves the owned session", async (t) => {
   let calls = 0;
   t.mock.method(globalThis, "fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -248,10 +247,7 @@ test("RHODIZ sensitive browser actions preserve ticket semantics", async (t) => 
 
 test("RHODIZ browser close never falls back to the OpenMuse worker", async (t) => {
   t.mock.method(globalThis, "fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
-    assert.equal(
-      String(input),
-      "http://rhodiz.internal/api/rhodiz/computer/sesiones/session_1",
-    );
+    assert.equal(String(input), "http://rhodiz.internal/api/rhodiz/computer/sesiones/session_1");
     assert.equal(init?.method, "DELETE");
     const headers = new Headers(init?.headers);
     assert.equal(headers.get("x-rhodiz-token"), "canonical-bearer");
@@ -259,8 +255,7 @@ test("RHODIZ browser close never falls back to the OpenMuse worker", async (t) =
     return Response.json({ closed: true });
   });
 
-  assert.deepEqual(
-    await rhodizBrowserClose(config, "Bearer canonical-bearer", "session_1"),
-    { closed: true },
-  );
+  assert.deepEqual(await rhodizBrowserClose(config, "Bearer canonical-bearer", "session_1"), {
+    closed: true,
+  });
 });
