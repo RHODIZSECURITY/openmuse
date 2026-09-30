@@ -331,6 +331,13 @@ export class WorkspaceService {
             : this.config.intelligenceApiKey
               ? "intelligence"
               : "local",
+        browserBackend: this.config.authBackend === "rhodiz" ? "rhodiz" : "openmuse",
+        browserStatus:
+          this.config.authBackend === "rhodiz"
+            ? "disabled"
+            : this.config.workerUrl && this.config.workerToken
+              ? "connected"
+              : "disabled",
       },
     };
   }
