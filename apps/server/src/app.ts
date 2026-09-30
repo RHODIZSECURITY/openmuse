@@ -93,7 +93,7 @@ export async function createApp(
     c.json({
       ok: true,
       mode: config.mode,
-      authBackend: config.authBackend,
+      authBackend: config.authBackend ?? "local",
       agentConfigured: agentConfigured(config),
       browserConfigured: Boolean(config.workerUrl && config.workerToken),
     }),
@@ -116,7 +116,7 @@ export async function createApp(
       })
       .parse(await c.req.json());
     const session = await auth.session(body);
-    if (config.authBackend === "local") {
+    if (config.authBackend !== "rhodiz") {
       await workspace.ensureSample(session.owner, actions);
       await agent.ensure(session.owner);
       if (config.mode === "sample") await agent.refreshIdeas(session.owner);
