@@ -57,7 +57,6 @@ test("RHODIZ browser transport failure degrades to offline", async (t) => {
   assert.equal(await rhodizBrowserState(config, "Bearer canonical-bearer"), "offline");
 });
 
-
 test("RHODIZ browser sessions are owner-authenticated and mapped read-only", async (t) => {
   t.mock.method(globalThis, "fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
     assert.equal(String(input), "http://rhodiz.internal/api/rhodiz/computer/sesiones");
