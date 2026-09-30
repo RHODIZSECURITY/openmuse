@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { aguiHeaders } from "../apps/server/src/agent.ts";
+import { createApp } from "../apps/server/src/app.ts";
 import { Auth } from "../apps/server/src/auth.ts";
 import type { Config } from "../apps/server/src/config.ts";
-import type { Store } from "../apps/server/src/db.ts";
+import { createStore, type Store } from "../apps/server/src/db.ts";
 
 const base: Config = {
   mode: "sample",
@@ -94,3 +95,99 @@ test("AG-UI forwards the verified RHODIZ bearer and ignores a static agent token
     Authorization: "Bearer service-token",
   });
 });
+
+test("RHODIZ conversation history stays canonical and local conversation writes are disabled", async (t) => {
+  const db = await createStore();
+  try {
+    const calls: string[] = [];
+    t.mock.method(globalThis, "fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      calls.push(url);
+      if (url === "http://rhodiz.internal/api/rhodiz/sesion") {
+        assert.equal(new Headers(init?.headers).get("x-rhodiz-token"), "canonical-bearer");
+        return Response.json({
+          user_id: "9c3d22bc-1f50-4a67-b413-a589593abf77",
+          usuario: "richard",
+          rol: "admin",
+        });
+      }
+      if (
+        url ===
+        "http://rhodiz.internal/api/rhodiz/openmuse/conversation?threadId=local-main"
+      ) {
+        assert.equal(new Headers(init?.headers).get("authorization"), "Bearer canonical-bearer");
+        return Response.json({
+          threadId: "local-main",
+          canonical: "rhodiz",
+          messages: [
+            { id: "m-user", role: "user", content: "Hola RHODIZ" },
+            { id: "m-assistant", role: "assistant", content: "Hola Richard" },
+          ],
+        });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+
+    const server = await createApp(db, {
+      ...base,
+      mode: "live",
+      intelligenceApiKey: "configured-but-must-not-own-history",
+      encryptionKey: "test-only",
+    });
+    const headers = {
+      Authorization: "Bearer canonical-bearer",
+      "Content-Type": "application/json",
+    };
+
+    const history = await server.app.request("/api/conversation", { headers });
+    assert.equal(history.status, 200);
+    assert.deepEqual(await history.json(), {
+      messages: [
+        { id: "m-user", role: "user", content: "Hola RHODIZ" },
+        { id: "m-assistant", role: "assistant", content: "Hola Richard" },
+      ],
+      canonical: "rhodiz",
+    });
+
+    const save = await server.app.request("/api/conversation", {
+      method: "PUT",
+      headers,
+      body: JSON.stringify({
+        messages: [{ id: "local-copy", role: "user", content: "must not persist" }],
+      }),
+    });
+    assert.equal(save.status, 200);
+    assert.deepEqual(await save.json(), {
+      ok: true,
+      canonical: "rhodiz",
+      localWrite: false,
+    });
+    assert.equal(
+      await db.get(
+        "9c3d22bc-1f50-4a67-b413-a589593abf77",
+        "conversations",
+        "default",
+      ),
+      null,
+    );
+
+    const workspace = await server.app.request("/api/workspace", { headers });
+    assert.equal(workspace.status, 200);
+    const snapshot = await workspace.json();
+    assert.equal(snapshot.runtime.richThreads, false);
+    assert.equal(snapshot.runtime.conversationStore, "rhodiz");
+
+    const main = await server.app.request("/api/main-thread", { headers });
+    assert.equal(main.status, 200);
+    assert.deepEqual(await main.json(), {
+      threadId: "local-main",
+      existing: true,
+      canonical: "rhodiz",
+    });
+
+    assert.ok(calls.includes("http://rhodiz.internal/api/rhodiz/openmuse/conversation?threadId=local-main"));
+  } finally {
+    await db.close();
+  }
+});
+
