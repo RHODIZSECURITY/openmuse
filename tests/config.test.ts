@@ -44,3 +44,16 @@ test("live API configuration accepts a non-empty Intelligence key", () => {
 test("sample API configuration remains key-free", () => {
   assert.doesNotThrow(() => assertApiDeploymentConfig(sampleConfig));
 });
+
+test("RHODIZ sovereign live configuration remains Intelligence-key-free", () => {
+  const rhodiz: Config = {
+    ...liveConfig(),
+    agentBackend: "agui",
+    authBackend: "rhodiz",
+    rhodizApiUrl: "http://rhodiz.internal",
+    agentUrl: "http://rhodiz.internal/api/rhodiz/openmuse/agui",
+  };
+  for (const key of [undefined, "", " \t\n"]) {
+    assert.doesNotThrow(() => assertApiDeploymentConfig({ ...rhodiz, intelligenceApiKey: key }));
+  }
+});

@@ -290,8 +290,14 @@ export class WorkspaceService {
       events: events.sort((a, b) => a.start.localeCompare(b.start)),
       files: await this.files.list(owner),
       browsers: await this.db.list<BrowserSession>(owner, "browsers"),
-      actions: await this.db.list<ActionProposal>(owner, "actions"),
-      activity: await this.db.list<ActivityEntry>(owner, "activity"),
+      actions:
+        this.config.authBackend === "rhodiz"
+          ? []
+          : await this.db.list<ActionProposal>(owner, "actions"),
+      activity:
+        this.config.authBackend === "rhodiz"
+          ? []
+          : await this.db.list<ActivityEntry>(owner, "activity"),
       connections: [
         {
           id: "google",
@@ -323,7 +329,21 @@ export class WorkspaceService {
         provider: this.config.agentBackend === "sample" ? "sample" : "model",
         configured: agentConfigured(this.config),
         openbotConfigured: false,
-        richThreads: Boolean(this.config.intelligenceApiKey),
+        richThreads:
+          this.config.authBackend !== "rhodiz" && Boolean(this.config.intelligenceApiKey),
+        conversationStore:
+          this.config.authBackend === "rhodiz"
+            ? "rhodiz"
+            : this.config.intelligenceApiKey
+              ? "intelligence"
+              : "local",
+        browserBackend: this.config.authBackend === "rhodiz" ? "rhodiz" : "openmuse",
+        browserStatus:
+          this.config.authBackend === "rhodiz"
+            ? "disabled"
+            : this.config.workerUrl && this.config.workerToken
+              ? "connected"
+              : "disabled",
       },
     };
   }
@@ -438,6 +458,8 @@ export class WorkspaceService {
       decodeURIComponent(filename),
       await this.google(owner, connection.id).getAttachment(messageId, attachmentId),
       `Gmail · ${message.subject}`,
+      undefined,
+      JSON.stringify(["attachment", connection.id, reference]),
     );
     await this.db.put(owner, "imports", {
       id: reference,

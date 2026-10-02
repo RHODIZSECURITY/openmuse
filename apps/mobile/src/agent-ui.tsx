@@ -876,13 +876,15 @@ function FinanceArtifact({ artifact }: { artifact: AgentArtifact }) {
 }
 export function DelegateSheet() {
   const { workspace, close, open } = useWorkspace();
-  const { delegate } = useAgentWorkspace();
+  const { data, delegate } = useAgentWorkspace();
   const [kind, setKind] = useState<AgentTask["kind"]>("plan");
   const [prompt, setPrompt] = useState("");
   const [messageId, setMessageId] = useState("");
   const [csv, setCsv] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const rhodizWorkReadOnly =
+    data?.authority?.work === "rhodiz" && data.authority.workMutable === false;
   async function submit() {
     setBusy(true);
     setError("");
@@ -899,6 +901,23 @@ export function DelegateSheet() {
       setBusy(false);
     }
   }
+  if (rhodizWorkReadOnly)
+    return (
+      <Sheet
+        title="RHODIZ Work"
+        subtitle="RHODIZ Work is canonical; OpenMuse is presenting its state read-only."
+        onClose={close}
+      >
+        <Card style={{ gap: 12 }}>
+          <Text style={s.heading}>Delegation remains fail-closed</Text>
+          <Text style={s.muted}>
+            Task creation, approval and resume/retry stay in RHODIZ until the Work and Action Fabric
+            idempotency, ticket and receipt contract is certified. OpenMuse does not start a second
+            task engine.
+          </Text>
+        </Card>
+      </Sheet>
+    );
   return (
     <Sheet
       title="Hand over an outcome"
@@ -998,6 +1017,8 @@ export function IdeasScreen() {
   const { data, mutate } = useAgentWorkspace();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const rhodizIdeasReadOnly =
+    data?.authority?.work === "rhodiz" && data.authority.goalsIdeasMutable === false;
   async function refreshIdeas() {
     setBusy(true);
     setError("");
@@ -1010,6 +1031,17 @@ export function IdeasScreen() {
     }
   }
   const ideas = data?.ideas.filter((idea) => idea.status === "new") || [];
+  if (rhodizIdeasReadOnly)
+    return (
+      <View style={{ gap: 20 }}>
+        <AgentStatus />
+        <Empty
+          icon={Lightbulb}
+          title="Suggestions stay with RHODIZ"
+          detail="OpenMuse does not keep a parallel Ideas store. Suggestions will appear here only after RHODIZ exposes a canonical Outcome contract."
+        />
+      </View>
+    );
   return (
     <View style={{ gap: 20 }}>
       <AgentStatus />
@@ -1141,9 +1173,22 @@ export function GoalsScreen() {
   const [selectedGoal, setSelectedGoal] = useState<string>();
   const [selectedMonitor, setSelectedMonitor] = useState<string>();
   const [showAll, setShowAll] = useState(false);
+  const rhodizGoalsReadOnly =
+    data?.authority?.work === "rhodiz" && data.authority.goalsIdeasMutable === false;
   const goal = data?.goals.find((item) => item.id === selectedGoal);
   const monitor = data?.monitors.find((item) => item.id === selectedMonitor);
   const monitors = data?.monitors || [];
+  if (rhodizGoalsReadOnly)
+    return (
+      <View style={{ gap: 22 }}>
+        <AgentStatus />
+        <Empty
+          icon={Target}
+          title="Goals and tracking stay with RHODIZ"
+          detail="OpenMuse does not create a parallel Goals, Ideas or Monitor store while RHODIZ Work is canonical."
+        />
+      </View>
+    );
   return (
     <View style={{ gap: 22 }}>
       <AgentStatus />
@@ -1673,6 +1718,8 @@ export function AppsScreen() {
   const [memory, setMemory] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const rhodizAuthority = data?.authority?.identity === "rhodiz";
+  const memoryEditable = data?.authority?.memoryEditable !== false;
   useEffect(() => {
     if (data?.identity) {
       setName(data.identity.name);
@@ -1753,62 +1800,82 @@ export function AppsScreen() {
           ))}
       </Card>
       <Button onPress={() => setSettings(!settings)}>
-        {settings ? "Close agent settings" : "Personality & memory"}
+        {settings
+          ? "Close agent settings"
+          : rhodizAuthority
+            ? "RHODIZ identity & memory"
+            : "Personality & memory"}
       </Button>
       {settings && (
         <>
           <Card style={{ gap: 10 }}>
-            <SectionHeading title="Your agent" />
-            <View style={[s.row, { gap: 16, justifyContent: "center", marginBottom: 12 }]}>
-              {(["sky", "sand", "lilac"] as const).map((item) => (
-                <Pressable
-                  key={item}
-                  accessibilityRole="radio"
-                  accessibilityLabel={`${statusLabel(item)} avatar`}
-                  accessibilityState={{ checked: avatar === item }}
-                  onPress={() => setAvatar(item)}
-                  style={{
-                    padding: 7,
-                    borderRadius: 24,
-                    backgroundColor: avatar === item ? colors.sky : colors.canvas,
-                  }}
+            <SectionHeading title={rhodizAuthority ? "RHODIZ identity" : "Your agent"} />
+            {rhodizAuthority ? (
+              <View style={{ alignItems: "center", gap: 10, paddingVertical: 6 }}>
+                <Mascot size={70} variant={data?.identity.avatar || "sky"} />
+                <Text style={s.heading}>{data?.identity.name || "RHODIZ IA"}</Text>
+                <Text style={[s.muted, { textAlign: "center" }]}>
+                  RHODIZ owns this identity. OpenMuse only presents the canonical assistant.
+                </Text>
+              </View>
+            ) : (
+              <>
+                <View style={[s.row, { gap: 16, justifyContent: "center", marginBottom: 12 }]}>
+                  {(["sky", "sand", "lilac"] as const).map((item) => (
+                    <Pressable
+                      key={item}
+                      accessibilityRole="radio"
+                      accessibilityLabel={`${statusLabel(item)} avatar`}
+                      accessibilityState={{ checked: avatar === item }}
+                      onPress={() => setAvatar(item)}
+                      style={{
+                        padding: 7,
+                        borderRadius: 24,
+                        backgroundColor: avatar === item ? colors.sky : colors.canvas,
+                      }}
+                    >
+                      <Mascot size={62} variant={item} />
+                    </Pressable>
+                  ))}
+                </View>
+                <Field label="Name" value={name} onChangeText={setName} />
+                <View style={[s.row, { gap: 8 }]}>
+                  {(["warm", "concise", "thoughtful"] as const).map((item) => (
+                    <Button key={item} small primary={tone === item} onPress={() => setTone(item)}>
+                      {statusLabel(item)}
+                    </Button>
+                  ))}
+                </View>
+                <CheckRow
+                  label="Show background updates in chat"
+                  checked={showChatUpdates}
+                  onPress={() => setShowChatUpdates(!showChatUpdates)}
+                />
+                <Text style={s.small}>
+                  Activity and notifications always keep the full record, including requests for
+                  approval.
+                </Text>
+                <Button
+                  busy={busy}
+                  disabled={!name.trim()}
+                  onPress={() =>
+                    void save("/identity", { name: name.trim(), tone, avatar, showChatUpdates })
+                  }
                 >
-                  <Mascot size={62} variant={item} />
-                </Pressable>
-              ))}
-            </View>
-            <Field label="Name" value={name} onChangeText={setName} />
-            <View style={[s.row, { gap: 8 }]}>
-              {(["warm", "concise", "thoughtful"] as const).map((item) => (
-                <Button key={item} small primary={tone === item} onPress={() => setTone(item)}>
-                  {statusLabel(item)}
+                  Save preferences
                 </Button>
-              ))}
-            </View>
-            <CheckRow
-              label="Show background updates in chat"
-              checked={showChatUpdates}
-              onPress={() => setShowChatUpdates(!showChatUpdates)}
-            />
-            <Text style={s.small}>
-              Activity and notifications always keep the full record, including requests for
-              approval.
-            </Text>
-            <Button
-              busy={busy}
-              disabled={!name.trim()}
-              onPress={() =>
-                void save("/identity", { name: name.trim(), tone, avatar, showChatUpdates })
-              }
-            >
-              Save preferences
-            </Button>
+              </>
+            )}
           </Card>
           <Card style={{ gap: 12 }}>
             <SectionHeading title="Memory" />
-            <Text style={s.muted}>Context you can inspect, correct or forget.</Text>
+            <Text style={s.muted}>
+              {data?.authority?.memory === "rhodiz"
+                ? "MemoryOS is canonical. This surface can add or forget memories, but does not keep a parallel OpenMuse memory store."
+                : "Context you can inspect, correct or forget."}
+            </Text>
             {data?.memories.map((item) => (
-              <MemoryRow key={item.id} memory={item} />
+              <MemoryRow key={item.id} memory={item} editable={memoryEditable} />
             ))}
             <Field
               label="Remember something about me"
@@ -1832,7 +1899,7 @@ export function AppsScreen() {
     </View>
   );
 }
-function MemoryRow({ memory }: { memory: AgentMemory }) {
+function MemoryRow({ memory, editable = true }: { memory: AgentMemory; editable?: boolean }) {
   const { mutate } = useAgentWorkspace();
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(memory.text);
@@ -1842,7 +1909,10 @@ function MemoryRow({ memory }: { memory: AgentMemory }) {
     setBusy(true);
     setError("");
     try {
-      await mutate(`/memories/${memory.id}${forget ? "/forget" : ""}`, forget ? {} : { text });
+      await mutate(
+        `/memories/${memory.id}${forget ? "/forget" : ""}`,
+        forget ? { version: memory.version } : { text },
+      );
       setEditing(false);
     } catch (e) {
       setError(errorText(e));
@@ -1867,11 +1937,11 @@ function MemoryRow({ memory }: { memory: AgentMemory }) {
           <Button small busy={busy} disabled={!text.trim()} onPress={() => void act(false)}>
             Save correction
           </Button>
-        ) : (
+        ) : editable ? (
           <Button small onPress={() => setEditing(true)}>
             Edit
           </Button>
-        )}
+        ) : null}
         <Button small danger busy={busy} onPress={() => void act(true)}>
           Forget
         </Button>

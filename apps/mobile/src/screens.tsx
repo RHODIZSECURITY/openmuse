@@ -39,6 +39,7 @@ import type {
   EmailDraft,
 } from "../../../packages/domain/src";
 import { API_URL } from "./api";
+import { browserAddress } from "./browser-address";
 import { localDateTime, zonedInstant } from "./date-time";
 import {
   Button,
@@ -824,14 +825,19 @@ export function BrowserScreen() {
   const [url, setUrl] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const sovereign = w.runtime.browserBackend === "rhodiz";
   async function create() {
+    if (!url.trim()) return;
     setError("");
     setBusy(true);
     try {
-      const browser = await api.request<BrowserSession>("/api/browsers", { url });
+      const target = browserAddress(url);
+      const browser = sovereign
+        ? await api.request<BrowserSession>("/api/rhodiz-browser/sessions", {})
+        : await api.request<BrowserSession>("/api/browsers", { url: target });
       await refresh();
       setUrl("");
-      open({ type: "browser", browser });
+      open({ type: "browser", browser: sovereign ? { ...browser, url: target } : browser });
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -844,8 +850,14 @@ export function BrowserScreen() {
         <View style={[s.row, { gap: 12, marginBottom: 15 }]}>
           <Globe2 size={22} color={colors.blueDark} />
           <View>
-            <Text style={s.heading}>A place for your open tabs</Text>
-            <Text style={s.muted}>Browse in a private, persistent workspace session.</Text>
+            <Text style={s.heading}>
+              {sovereign ? "RHODIZ browser sessions" : "A place for your open tabs"}
+            </Text>
+            <Text style={s.muted}>
+              {sovereign
+                ? "Sessions and previews come from the canonical RHODIZ browser. Control stays behind RHODIZ Action Fabric."
+                : "Browse in a private, persistent workspace session."}
+            </Text>
           </View>
         </View>
         <View style={[s.row, { gap: 10 }]}>
@@ -866,7 +878,7 @@ export function BrowserScreen() {
             disabled={!url.trim()}
             onPress={() => void create()}
           >
-            Open session
+            {sovereign ? "Create RHODIZ session" : "Open session"}
           </Button>
         </View>
         <ErrorNotice error={error} />
@@ -900,7 +912,10 @@ export function BrowserScreen() {
               </View>
               {b.previewUrl && (
                 <Image
-                  source={{ uri: api.url(b.previewUrl) }}
+                  source={{
+                    uri: api.url(b.previewUrl),
+                    ...(sovereign ? { headers: { Authorization: `Bearer ${api.token}` } } : {}),
+                  }}
                   resizeMode="cover"
                   style={{
                     height: 180,
@@ -915,8 +930,12 @@ export function BrowserScreen() {
         ) : (
           <Empty
             icon={Globe2}
-            title="Start with a website"
-            detail="Open a session above to keep your browsing together. Live previews appear when the browser worker is configured."
+            title={sovereign ? "No active RHODIZ browser sessions" : "Start with a website"}
+            detail={
+              sovereign
+                ? "Create a RHODIZ session above. Navigation will require an explicit one-shot Action Fabric confirmation."
+                : "Open a session above to keep your browsing together. Live previews appear when the browser worker is configured."
+            }
           />
         )}
       </Card>
@@ -1350,8 +1369,14 @@ export function ConnectionsScreen({ query = "" }: { query?: string }) {
                 }
               />
               <SettingsLine
-                label="Rich Threads"
-                value={w.runtime.richThreads ? "CopilotKit Intelligence" : "Not connected"}
+                label="Conversation history"
+                value={
+                  w.runtime.conversationStore === "rhodiz"
+                    ? "RHODIZ canonical"
+                    : w.runtime.richThreads
+                      ? "CopilotKit Intelligence"
+                      : "Local workspace"
+                }
               />
               <Button
                 small

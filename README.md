@@ -134,7 +134,7 @@ No hidden retry occurs after an uncertain external write. Review its provider ou
 
 ## CopilotKit Rich Threads
 
-Live deployments require `CPK_INTELLIGENCE_API_KEY` on the API server for CopilotKit Intelligence conversation persistence and replay. Create or select a project with `npx copilotkit@latest login` and `npx copilotkit@latest project select`, set the generated server-only key, and restart the API. The native menu uses `useThreads`; rich tool results link back to saved tasks, documents, and browser sessions.
+Local live deployments require `CPK_INTELLIGENCE_API_KEY` on the API server for CopilotKit Intelligence conversation persistence and replay. Create or select a project with `npx copilotkit@latest login` and `npx copilotkit@latest project select`, set the generated server-only key, and restart the API. The native menu uses `useThreads`; rich tool results link back to saved tasks, documents, and browser sessions. In the RHODIZ sovereign integration, Intelligence remains optional and is not used as the canonical conversation store.
 
 Sample mode can leave the key unset and keeps one conversation in the local database. Intelligence is a separate service and is not included in this repository's MIT license. No project key is shipped. [Configuration and validation boundaries](docs/RICH-THREADS.md).
 

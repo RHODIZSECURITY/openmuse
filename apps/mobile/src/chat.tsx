@@ -178,6 +178,7 @@ export function ChatScreen({
   const { enabled: richThreads, mainId, claimPrompt } = useMuseThread();
   const selection = thread || { id: "local", existing: false };
   const threadId = richThreads ? selection.id : "local-main";
+  const conversationStore = w.runtime.conversationStore ?? (richThreads ? "intelligence" : "local");
   const agentId = `openmuse-${threadId}`;
   const { agent, isReady } = useAgent({ agentId, runtimeAgentId: "default", threadId });
   const { copilotkit } = useCopilotKit();
@@ -241,9 +242,10 @@ export function ChatScreen({
     };
   }, [agent, agentId, api, copilotkit, isReady, historyAttempt, richThreads, selection.existing]);
   const saveHistory = useCallback(async () => {
-    if (!richThreads) await api.request("/api/conversation", { messages: agent.messages }, "PUT");
+    if (conversationStore === "local")
+      await api.request("/api/conversation", { messages: agent.messages }, "PUT");
     setSaveError("");
-  }, [agent, api, richThreads]);
+  }, [agent, api, conversationStore]);
   const run = useCallback(
     async (message?: QueuedMessage) => {
       if (runLock.current || agent.isRunning || !isReady || !loaded)

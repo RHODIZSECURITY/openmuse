@@ -19,6 +19,15 @@ import { AgentService } from "./engine/service.ts";
 import { AppError } from "./errors.ts";
 import { Files } from "./files.ts";
 import { GoogleAuth } from "./google-auth.ts";
+import {
+  rhodizBrowserAction,
+  rhodizBrowserClose,
+  rhodizBrowserCreate,
+  rhodizBrowserNavigate,
+  rhodizBrowserPreview,
+  rhodizBrowserSessions,
+  rhodizBrowserState,
+} from "./rhodiz-browser.ts";
 import { WorkspaceService } from "./workspace.ts";
 
 export async function createApp(
@@ -40,9 +49,10 @@ export async function createApp(
   const browser = new BrowserService(db, config, auth, files);
   const computer = new ComputerService(db, config, options.docker);
   const agent = new AgentService(db, config, workspace, files, actions, browser, computer);
-  const intelligence = config.intelligenceApiKey
-    ? new CopilotKitIntelligence({ apiKey: config.intelligenceApiKey })
-    : undefined;
+  const intelligence =
+    config.authBackend !== "rhodiz" && config.intelligenceApiKey
+      ? new CopilotKitIntelligence({ apiKey: config.intelligenceApiKey })
+      : undefined;
   const runtime = makeRuntime(config, agent, auth, intelligence);
   const app = new Hono<{ Variables: { owner: string } }>();
   const origins = new Set([...config.allowedOrigins, new URL(config.publicUrl).origin]);
@@ -93,6 +103,7 @@ export async function createApp(
     c.json({
       ok: true,
       mode: config.mode,
+      authBackend: config.authBackend ?? "local",
       agentConfigured: agentConfigured(config),
       browserConfigured: Boolean(config.workerUrl && config.workerToken),
     }),
@@ -106,12 +117,21 @@ export async function createApp(
     }
     if (++loginAttempts > 30)
       throw new AppError("Too many sign-in attempts. Try again in a minute.", 429);
-    const body = z.object({ accessKey: z.string().optional() }).parse(await c.req.json());
-    const session = await auth.session(body.accessKey);
-    await workspace.ensureSample("local-user", actions);
-    await agent.ensure("local-user");
-    if (config.mode === "sample") await agent.refreshIdeas("local-user");
-    return c.json(session);
+    const body = z
+      .object({
+        accessKey: z.string().optional(),
+        usuario: z.string().max(120).optional(),
+        password: z.string().max(256).optional(),
+        dispositivo: z.string().max(120).optional(),
+      })
+      .parse(await c.req.json());
+    const session = await auth.session(body);
+    if (config.authBackend !== "rhodiz") {
+      await workspace.ensureSample(session.owner, actions);
+      await agent.ensure(session.owner);
+      if (config.mode === "sample") await agent.refreshIdeas(session.owner);
+    }
+    return c.json({ token: session.token, mode: session.mode });
   });
   app.get("/api/google/callback", async (c) => {
     if (c.req.query("error"))
@@ -126,6 +146,7 @@ export async function createApp(
   });
   app.use("/api/*", async (c, next) => {
     const signedRoute =
+      config.authBackend !== "rhodiz" &&
       /^\/api\/files\/[^/]+\/content$|^\/api\/browsers\/[^/]+\/(?:preview|console)$/.test(
         c.req.path,
       );
@@ -134,14 +155,109 @@ export async function createApp(
         ? auth.verify(new URL(c.req.url))
         : await auth.owner(c.req.header("authorization"));
     c.set("owner", owner);
+    if (config.authBackend === "rhodiz" && /^\/api\/(?:browsers|computer)(?:\/|$)/.test(c.req.path))
+      throw new AppError(
+        "OpenMuse local Computer/browser effects are disabled in RHODIZ mode. RHODIZ Action Fabric remains authoritative.",
+        409,
+      );
     await next();
   });
   app.get("/api/workspace", async (c) => {
     const snapshot = await workspace.snapshot(c.get("owner"), c.req.query("q"));
-    snapshot.browsers = snapshot.browsers.map((s) => browser.decorate(c.get("owner"), s));
+    if (config.authBackend === "rhodiz") {
+      const authorization = c.req.header("authorization");
+      const state = await rhodizBrowserState(config, authorization);
+      snapshot.browsers =
+        state === "connected" ? await rhodizBrowserSessions(config, authorization) : [];
+      snapshot.runtime.browserBackend = "rhodiz";
+      snapshot.runtime.browserStatus = state;
+      const connection = snapshot.connections.find((item) => item.id === "browser");
+      if (connection) {
+        connection.status =
+          state === "connected"
+            ? "connected"
+            : state === "disabled"
+              ? "unconfigured"
+              : "disconnected";
+        connection.capabilities = [
+          "RHODIZ browser_agent",
+          "RHODIZ Policy / Action Fabric",
+          "HMAC anti-replay",
+          "SSRF-safe browsing",
+        ];
+      }
+    } else {
+      snapshot.browsers = snapshot.browsers.map((s) => browser.decorate(c.get("owner"), s));
+    }
     return c.json(snapshot);
   });
   app.route("/api/agent", agentRoutes(agent));
+  app.post("/api/rhodiz-browser/sessions", async (c) => {
+    if (config.authBackend !== "rhodiz") throw new AppError("Not found", 404);
+    const input = z
+      .object({
+        viewport_width: z.number().int().min(320).max(3840).optional(),
+        viewport_height: z.number().int().min(240).max(2160).optional(),
+        locale: z.string().min(1).max(30).optional(),
+      })
+      .parse(await c.req.json());
+    return c.json(await rhodizBrowserCreate(config, c.req.header("authorization"), input), 201);
+  });
+  app.post("/api/rhodiz-browser/:id/navigate", async (c) => {
+    if (config.authBackend !== "rhodiz") throw new AppError("Not found", 404);
+    const input = z
+      .object({ url: z.url().max(4096), ticket: z.string().min(1).max(8192).optional() })
+      .parse(await c.req.json());
+    return c.json(
+      await rhodizBrowserNavigate(config, c.req.header("authorization"), c.req.param("id"), input),
+    );
+  });
+  app.post("/api/rhodiz-browser/:id/action", async (c) => {
+    if (config.authBackend !== "rhodiz") throw new AppError("Not found", 404);
+    const input = z
+      .object({
+        action: z.enum([
+          "click",
+          "fill",
+          "press",
+          "select",
+          "scroll",
+          "wait",
+          "back",
+          "forward",
+          "reload",
+        ]),
+        selector: z.string().max(2000).optional(),
+        value: z.string().max(20000).optional(),
+        key: z.string().max(100).optional(),
+        x: z.number().int().optional(),
+        y: z.number().int().optional(),
+        timeout_ms: z.number().int().min(500).max(60000).optional(),
+        ticket: z.string().min(1).max(8192).optional(),
+      })
+      .parse(await c.req.json());
+    return c.json(
+      await rhodizBrowserAction(config, c.req.header("authorization"), c.req.param("id"), input),
+    );
+  });
+  app.post("/api/rhodiz-browser/:id/close", async (c) => {
+    if (config.authBackend !== "rhodiz") throw new AppError("Not found", 404);
+    return c.json(
+      await rhodizBrowserClose(config, c.req.header("authorization"), c.req.param("id")),
+    );
+  });
+  app.get("/api/rhodiz-browser/:id/preview", async (c) => {
+    if (config.authBackend !== "rhodiz") throw new AppError("Not found", 404);
+    const bytes = await rhodizBrowserPreview(
+      config,
+      c.req.header("authorization"),
+      c.req.param("id"),
+    );
+    c.header("Content-Type", "image/png");
+    c.header("Content-Length", String(bytes.byteLength));
+    c.header("Cache-Control", "no-store");
+    return c.body(Uint8Array.from(bytes));
+  });
   app.route("/api/computer", computerRoutes(computer, files));
   app.get("/api/calendars", async (c) => c.json(await workspace.calendars(c.get("owner"))));
   app.get("/api/calendar/events", async (c) => {
@@ -165,12 +281,22 @@ export async function createApp(
     c.json(await workspace.thread(c.get("owner"), c.req.param("id"))),
   );
   app.post("/api/actions", async (c) => {
+    if (config.authBackend === "rhodiz")
+      throw new AppError(
+        "RHODIZ Action Fabric is canonical; OpenMuse cannot create a parallel approval.",
+        409,
+      );
     const input = proposalSchema.parse(await c.req.json());
     if (input.kind === "email.send")
       for (const id of input.data.attachmentIds) await files.get(c.get("owner"), id);
     return c.json(await actions.propose(c.get("owner"), input), 201);
   });
   app.post("/api/actions/:id/decide", async (c) => {
+    if (config.authBackend === "rhodiz")
+      throw new AppError(
+        "RHODIZ Action Fabric is canonical; OpenMuse cannot decide a parallel approval.",
+        409,
+      );
     const body = z
       .object({ hash: z.string(), decision: z.enum(["approve", "deny"]) })
       .parse(await c.req.json());
@@ -195,6 +321,8 @@ export async function createApp(
     );
   });
   app.get("/api/main-thread", async (c) => {
+    if (config.authBackend === "rhodiz")
+      return c.json({ threadId: "local-main", existing: true, canonical: "rhodiz" });
     const owner = c.get("owner");
     await db.insertIfAbsent(owner, "conversation-settings", {
       id: "main",
@@ -219,10 +347,52 @@ export async function createApp(
     }
     return c.json({ threadId: main.threadId, existing: Boolean(intelligence) });
   });
-  app.get("/api/conversation", async (c) =>
-    c.json((await db.get(c.get("owner"), "conversations", "default")) ?? { messages: [] }),
-  );
+  app.get("/api/conversation", async (c) => {
+    if (config.authBackend === "rhodiz") {
+      const authorization = c.req.header("authorization");
+      const baseUrl = config.rhodizApiUrl;
+      if (!authorization || !baseUrl)
+        throw new AppError("RHODIZ conversation history is not configured", 503);
+      const threadId = c.req.query("threadId") ?? "local-main";
+      if (!threadId || threadId.length > 256)
+        throw new AppError("Conversation thread is invalid", 422);
+      let response: Response;
+      try {
+        response = await fetch(
+          `${baseUrl}/api/rhodiz/openmuse/conversation?threadId=${encodeURIComponent(threadId)}`,
+          {
+            headers: { Authorization: authorization },
+            signal: AbortSignal.timeout(5000),
+          },
+        );
+      } catch {
+        throw new AppError("RHODIZ conversation history is unavailable", 503);
+      }
+      let payload: unknown;
+      try {
+        payload = await response.json();
+      } catch {
+        payload = null;
+      }
+      if (!response.ok) {
+        if (response.status === 401)
+          throw new AppError("RHODIZ session expired. Sign in again.", 401);
+        throw new AppError("RHODIZ conversation history is unavailable", 502);
+      }
+      const parsed = z
+        .object({
+          canonical: z.literal("rhodiz"),
+          messages: z.array(z.unknown()).max(1000),
+        })
+        .parse(payload);
+      for (const message of parsed.messages) MessageSchema.parse(message);
+      return c.json({ messages: parsed.messages, canonical: parsed.canonical });
+    }
+    return c.json((await db.get(c.get("owner"), "conversations", "default")) ?? { messages: [] });
+  });
   app.put("/api/conversation", async (c) => {
+    if (config.authBackend === "rhodiz")
+      return c.json({ ok: true, canonical: "rhodiz", localWrite: false });
     const body = await c.req.json();
     const messages = z.array(z.unknown()).max(1000).parse(body.messages);
     for (const message of messages) MessageSchema.parse(message);

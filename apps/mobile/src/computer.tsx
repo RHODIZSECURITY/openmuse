@@ -21,6 +21,7 @@ export function ComputerEntry() {
   const available = workspace.connections.some(
     (c) => c.id === "browser" && c.status === "connected",
   );
+  const sovereign = workspace.runtime.browserBackend === "rhodiz";
   const active = workspace.browsers.filter((b) => b.status === "active").length;
   return (
     <Pressable
@@ -42,7 +43,15 @@ export function ComputerEntry() {
       <Monitor size={13} color={colors.muted} />
       <Text style={{ fontSize: 12, color: colors.muted }}>
         Computer
-        {active ? " · take control" : available ? " · ready" : " · offline"}
+        {sovereign
+          ? available
+            ? " · RHODIZ online"
+            : " · RHODIZ offline"
+          : active
+            ? " · take control"
+            : available
+              ? " · ready"
+              : " · offline"}
       </Text>
       <View
         style={{
@@ -56,7 +65,8 @@ export function ComputerEntry() {
   );
 }
 export function BrowserThreadCard({ browser }: { browser: BrowserSession }) {
-  const { open } = useWorkspace();
+  const { open, workspace, api } = useWorkspace();
+  const sovereign = workspace.runtime.browserBackend === "rhodiz";
   const [failed, setFailed] = useState(false);
   useEffect(() => {
     setFailed(false);
@@ -83,7 +93,10 @@ export function BrowserThreadCard({ browser }: { browser: BrowserSession }) {
       {browser.previewUrl && browser.status === "active" && !failed ? (
         <Image
           accessibilityLabel={`Browser preview: ${browser.title}`}
-          source={{ uri: browser.previewUrl }}
+          source={{
+            uri: api.url(browser.previewUrl),
+            ...(sovereign ? { headers: { Authorization: `Bearer ${api.token}` } } : {}),
+          }}
           style={{ width: "100%", aspectRatio: 1.6, borderRadius: 11, backgroundColor: "#FFF" }}
           resizeMode="contain"
           onError={() => setFailed(true)}
@@ -105,11 +118,13 @@ export function BrowserThreadCard({ browser }: { browser: BrowserSession }) {
         </View>
       )}
       <Button onPress={() => open({ type: "browser", browser })}>
-        {browser.status === "closed"
-          ? "Reopen browser"
-          : browser.status === "error"
-            ? "Reconnect browser"
-            : "Take control"}
+        {sovereign
+          ? "Open RHODIZ takeover"
+          : browser.status === "closed"
+            ? "Reopen browser"
+            : browser.status === "error"
+              ? "Reconnect browser"
+              : "Take control"}
       </Button>
     </Card>
   );
@@ -123,6 +138,9 @@ export function ComputerSheet() {
   const available = workspace.connections.some(
     (c) => c.id === "browser" && c.status === "connected",
   );
+  const sovereign = workspace.runtime.browserBackend === "rhodiz";
+  const browserStatus = workspace.runtime.browserStatus;
+  const effectiveTab = sovereign ? "Browser" : tab;
   useEffect(() => {
     let active = true;
     const timer = setInterval(() => {
@@ -137,15 +155,16 @@ export function ComputerSheet() {
     };
   }, [refresh]);
   async function create() {
-    if (busy || !url.trim()) return;
+    if (busy || !available || !url.trim()) return;
     setBusy(true);
     setError("");
     try {
-      const browser = await api.request<BrowserSession>("/api/browsers", {
-        url: browserAddress(url),
-      });
+      const target = browserAddress(url);
+      const browser = sovereign
+        ? await api.request<BrowserSession>("/api/rhodiz-browser/sessions", {})
+        : await api.request<BrowserSession>("/api/browsers", { url: target });
       await refresh();
-      open({ type: "browser", browser });
+      open({ type: "browser", browser: sovereign ? { ...browser, url: target } : browser });
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -159,38 +178,58 @@ export function ComputerSheet() {
       onClose={close}
     >
       <View style={{ gap: 20 }}>
-        {tab === "Browser" && (
+        {effectiveTab === "Browser" && (
           <View
             style={[s.row, { gap: 12, padding: 18, borderRadius: 20, backgroundColor: colors.sky }]}
           >
             <Monitor size={28} color={colors.blueDark} />
             <View style={{ flex: 1 }}>
-              <Text style={s.heading}>{available ? "Browser connected" : "Browser offline"}</Text>
+              <Text style={s.heading}>
+                {sovereign
+                  ? available
+                    ? "RHODIZ browser online"
+                    : browserStatus === "forbidden"
+                      ? "RHODIZ browser restricted"
+                      : "RHODIZ browser offline"
+                  : available
+                    ? "Browser connected"
+                    : "Browser offline"}
+              </Text>
               <Text style={s.muted}>
-                {available
-                  ? "Your agent’s browser and documents, in one place."
-                  : "Start the browser worker to connect this computer."}
+                {sovereign
+                  ? available
+                    ? "The canonical RHODIZ browser is healthy. Navigation is gated by one-shot RHODIZ Action Fabric confirmation tickets."
+                    : browserStatus === "forbidden"
+                      ? "This RHODIZ account is not authorized for Computer-use."
+                      : browserStatus === "disabled"
+                        ? "Enable RHODIZ Computer-use from its canonical Admin configuration."
+                        : "RHODIZ Computer-use is configured but its browser sidecar is unavailable."
+                  : available
+                    ? "Your agent’s browser and documents, in one place."
+                    : "Start the browser worker to connect this computer."}
               </Text>
             </View>
           </View>
         )}
         <View style={[s.row, { gap: 8 }]}>
-          {(["Browser", "Terminal", "Files"] as const).map((item) => (
-            <Button
-              key={item}
-              primary={tab === item}
-              icon={item === "Browser" ? Globe2 : item === "Terminal" ? Terminal : FolderOpen}
-              onPress={() => setTab(item)}
-            >
-              {item}
-            </Button>
-          ))}
+          {(sovereign ? (["Browser"] as const) : (["Browser", "Terminal", "Files"] as const)).map(
+            (item) => (
+              <Button
+                key={item}
+                primary={tab === item}
+                icon={item === "Browser" ? Globe2 : item === "Terminal" ? Terminal : FolderOpen}
+                onPress={() => setTab(item)}
+              >
+                {item}
+              </Button>
+            ),
+          )}
         </View>
-        <View style={{ display: tab === "Browser" ? "none" : "flex" }}>
-          <LinuxWorkspace tab={tab === "Files" ? "Files" : "Terminal"} />
+        <View style={{ display: effectiveTab === "Browser" ? "none" : "flex" }}>
+          <LinuxWorkspace tab={effectiveTab === "Files" ? "Files" : "Terminal"} />
         </View>
         <ErrorNotice error={error} />
-        {tab === "Browser" ? (
+        {effectiveTab === "Browser" ? (
           <>
             <View>
               <Field
@@ -209,7 +248,7 @@ export function ComputerSheet() {
                 disabled={!available || !url.trim()}
                 onPress={() => void create()}
               >
-                Open a browser session
+                {sovereign ? "Create RHODIZ session" : "Open a browser session"}
               </Button>
             </View>
             {[...workspace.browsers]
@@ -224,8 +263,9 @@ export function ComputerSheet() {
               </Text>
             )}
             <Text style={s.small}>
-              Browsing sessions keep their own logins and downloads. Open one to take over, then
-              return to your conversation.
+              {sovereign
+                ? "Browser state and effects come from RHODIZ. OpenMuse relays explicit confirmation tickets but never authorizes an effect itself."
+                : "Browsing sessions keep their own logins and downloads. Open one to take over, then return to your conversation."}
             </Text>
           </>
         ) : tab === "Files" ? (

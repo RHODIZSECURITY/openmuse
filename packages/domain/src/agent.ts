@@ -96,6 +96,7 @@ export interface AgentMemory {
   text: string;
   source: string;
   createdAt: string;
+  version?: number;
 }
 export interface AgentArtifact {
   id: string;
@@ -129,6 +130,16 @@ export interface AgentWorkspace {
   artifacts: AgentArtifact[];
   notifications: AgentNotification[];
   identity: AgentIdentity;
+  authority?: {
+    identity: "local" | "rhodiz";
+    memory: "local" | "rhodiz";
+    work?: "local" | "rhodiz";
+    notifications?: "local" | "rhodiz";
+    identityMutable: boolean;
+    memoryEditable: boolean;
+    workMutable?: boolean;
+    goalsIdeasMutable?: boolean;
+  };
   worker: { running: boolean; lastTickAt?: string };
 }
 export const createTaskSchema = z.object({

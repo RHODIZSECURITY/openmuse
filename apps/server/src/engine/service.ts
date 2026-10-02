@@ -115,6 +115,7 @@ export class AgentService {
     }
   }
   async ensure(owner: string) {
+    if (this.config.authBackend === "rhodiz") return;
     await this.db.insertIfAbsent(owner, "agent-settings", {
       id: "identity",
       name: "OpenMuse",
@@ -860,7 +861,7 @@ export class AgentService {
     let filledId = typeof task.state.filledId === "string" ? task.state.filledId : undefined;
     if (!filledId) {
       await ctx.guard();
-      const filled = await this.files.fill(owner, source.fileId, fields);
+      const filled = await this.files.fill(owner, source.fileId, fields, `document:${task.id}`);
       filledId = filled.id;
       task = await ctx.checkpoint({
         state: { ...task.state, source, filledId },

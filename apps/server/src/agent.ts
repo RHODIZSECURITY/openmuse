@@ -11,6 +11,11 @@ import type { Config } from "./config.ts";
 import { ConversationAgent } from "./engine/conversation.ts";
 import type { AgentService } from "./engine/service.ts";
 
+export function aguiHeaders(config: Config, authorization?: string): Record<string, string> {
+  if (config.authBackend === "rhodiz") return authorization ? { Authorization: authorization } : {};
+  return config.agentToken ? { Authorization: `Bearer ${config.agentToken}` } : {};
+}
+
 export function agentConfigured(config: Config) {
   return (
     config.agentBackend === "sample" ||
@@ -30,25 +35,21 @@ export function makeRuntime(
   auth: Auth,
   intelligence?: CopilotKitIntelligence,
 ) {
-  const agents: AgentsFactory = async ({ request }) => ({
-    default:
-      config.agentBackend === "sample"
-        ? new ConversationAgent(
-            config,
-            service,
-            await auth.owner(request.headers.get("authorization") ?? undefined),
-          )
-        : config.agentBackend === "agui"
-          ? new HttpAgent({
-              url: config.agentUrl ?? "http://127.0.0.1:1/unconfigured",
-              headers: config.agentToken ? { Authorization: `Bearer ${config.agentToken}` } : {},
-            })
-          : new ConversationAgent(
-              config,
-              service,
-              await auth.owner(request.headers.get("authorization") ?? undefined),
-            ),
-  });
+  const agents: AgentsFactory = async ({ request }) => {
+    const authorization = request.headers.get("authorization") ?? undefined;
+    const owner = await auth.owner(authorization);
+    return {
+      default:
+        config.agentBackend === "sample"
+          ? new ConversationAgent(config, service, owner)
+          : config.agentBackend === "agui"
+            ? new HttpAgent({
+                url: config.agentUrl ?? "http://127.0.0.1:1/unconfigured",
+                headers: aguiHeaders(config, authorization),
+              })
+            : new ConversationAgent(config, service, owner),
+    };
+  };
   const runtime = intelligence
     ? new CopilotRuntime({
         agents,

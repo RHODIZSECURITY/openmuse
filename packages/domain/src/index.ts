@@ -184,6 +184,9 @@ export interface Workspace {
     configured: boolean;
     openbotConfigured: boolean;
     richThreads?: boolean;
+    conversationStore?: "local" | "intelligence" | "rhodiz";
+    browserBackend?: "openmuse" | "rhodiz";
+    browserStatus?: "connected" | "offline" | "disabled" | "forbidden";
   };
 }
 
