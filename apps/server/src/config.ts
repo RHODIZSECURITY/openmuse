@@ -31,25 +31,16 @@ export interface Config {
   allowedOrigins: string[];
 }
 
-export const intelligenceKeyRequiredMessage =
-  "OpenMuse requires CPK_INTELLIGENCE_API_KEY. " +
+const missingIntelligenceKeyMessage =
+  "Live mode requires CPK_INTELLIGENCE_API_KEY for durable Rich Threads. " +
   "Run `npx copilotkit@latest login` and `npx copilotkit@latest project select`, " +
   "then set the generated server-only key. " +
   "See https://docs.copilotkit.ai/intelligence/connect-your-runtime";
 
-export function required(name: string, message: string, value = process.env[name]): string {
-  if (!value?.trim()) throw new Error(message);
-  return value.trim();
-}
-
-export function assertApiDeploymentConfig(
-  config: Config,
-): asserts config is Config & { intelligenceApiKey: string } {
-  required(
-    "CPK_INTELLIGENCE_API_KEY",
-    intelligenceKeyRequiredMessage,
-    config.intelligenceApiKey ?? "",
-  );
+export function assertApiDeploymentConfig(config: Config): void {
+  if (config.mode === "live" && !config.intelligenceApiKey?.trim()) {
+    throw new Error(missingIntelligenceKeyMessage);
+  }
 }
 
 export function readConfig(): Config {
@@ -76,7 +67,7 @@ export function readConfig(): Config {
     agentBackend: backend,
     agentUrl: process.env.AGENT_URL,
     agentToken: process.env.AGENT_TOKEN,
-    intelligenceApiKey: required("CPK_INTELLIGENCE_API_KEY", intelligenceKeyRequiredMessage),
+    intelligenceApiKey: process.env.CPK_INTELLIGENCE_API_KEY,
     googleClientId: process.env.GOOGLE_CLIENT_ID,
     googleClientSecret: process.env.GOOGLE_CLIENT_SECRET,
     googleRedirectUri: `${publicUrl}/api/google/callback`,
