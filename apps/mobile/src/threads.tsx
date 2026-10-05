@@ -11,6 +11,7 @@ import {
 } from "lucide-react-native";
 import { createContext, type ReactNode, useContext, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
+import { isRhodizPc } from "./rhodiz-pc";
 import { Button, colors, ErrorNotice, Field, LinkRow, Sheet, s } from "./ui";
 import { useWorkspace } from "./workspace";
 
@@ -315,8 +316,12 @@ export function ThreadsSheet({ onClose }: { onClose: () => void }) {
         />
         <LinkRow
           icon={Monitor}
-          title="Agent computer"
-          detail="Browser, sessions and documents"
+          title={isRhodizPc(workspace.runtime) ? "RHODIZ PC" : "Agent computer"}
+          detail={
+            isRhodizPc(workspace.runtime)
+              ? "Browser now; governed workspace, Terminal and Files next"
+              : "Browser, sessions and documents"
+          }
           onPress={() => {
             onClose();
             open({ type: "computer" });

@@ -34,6 +34,7 @@ import type {
   RunEvent,
 } from "../../../packages/domain/src/agent";
 import { useAgentWorkspace } from "./agent-workspace";
+import { isRhodizPc } from "./rhodiz-pc";
 import { ActivityScreen, ConnectionsScreen } from "./screens";
 import {
   Button,
@@ -1707,7 +1708,7 @@ export function NotificationsSheet() {
   );
 }
 export function AppsScreen() {
-  const { navigate, open } = useWorkspace();
+  const { navigate, open, workspace } = useWorkspace();
   const { data, mutate } = useAgentWorkspace();
   const [query, setQuery] = useState("");
   const [settings, setSettings] = useState(false);
@@ -1760,8 +1761,10 @@ export function AppsScreen() {
     },
     {
       section: "browser" as const,
-      title: "Agent computer",
-      detail: "Persistent browser sessions",
+      title: isRhodizPc(workspace.runtime) ? "RHODIZ PC" : "Agent computer",
+      detail: isRhodizPc(workspace.runtime)
+        ? "Browser now; governed workspace, Terminal and Files next"
+        : "Persistent browser sessions",
       icon: Globe2,
     },
     {

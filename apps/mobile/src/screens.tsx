@@ -41,6 +41,7 @@ import type {
 import { API_URL } from "./api";
 import { browserAddress } from "./browser-address";
 import { localDateTime, zonedInstant } from "./date-time";
+import { isRhodizPc } from "./rhodiz-pc";
 import {
   Button,
   Card,
@@ -1242,7 +1243,7 @@ export function ConnectionsScreen({ query = "" }: { query?: string }) {
     },
     {
       id: "browser",
-      name: "Agent computer",
+      name: isRhodizPc(w.runtime) ? "RHODIZ PC" : "Agent computer",
       icon: Globe2,
       color: "#1987CF",
       connected: w.connections.some((c) => c.id === "browser" && c.status === "connected"),
