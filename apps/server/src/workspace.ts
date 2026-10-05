@@ -344,6 +344,13 @@ export class WorkspaceService {
             : this.config.workerUrl && this.config.workerToken
               ? "connected"
               : "disabled",
+        computerBackend: this.config.authBackend === "rhodiz" ? "rhodiz" : "openmuse",
+        computerStatus:
+          this.config.authBackend === "rhodiz"
+            ? "disabled"
+            : this.config.computerEnabled
+              ? "connected"
+              : "disabled",
       },
     };
   }

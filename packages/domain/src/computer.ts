@@ -12,7 +12,7 @@ export interface ComputerCommand {
 }
 export interface ComputerSnapshot {
   enabled: boolean;
-  provider: "docker";
+  provider: "docker" | "rhodiz";
   status: "unconfigured" | "stopped" | "running" | "error";
   workspacePath: "/workspace";
   network: "disabled";

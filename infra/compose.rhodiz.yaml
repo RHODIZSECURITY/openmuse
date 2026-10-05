@@ -1,0 +1,40 @@
+# Release-input template only. Do not apply directly to RHODIZ production.
+name: rhodiz-openmuse
+services:
+  openmuse:
+    image: ${OPENMUSE_IMAGE:?Provide the approved OpenMuse image reference with digest}
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 30s
+    user: "1000:1000"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 128
+    mem_limit: ${OPENMUSE_MEMORY_LIMIT:-1g}
+    environment:
+      RHODIZ_API_URL: ${RHODIZ_API_URL:?Provide the canonical internal RHODIZ API URL}
+      AGENT_URL: ${RHODIZ_AGUI_URL:?Provide the canonical RHODIZ OpenMuse AG-UI URL}
+      PUBLIC_API_URL: ${OPENMUSE_PUBLIC_URL:?Provide the public URL including the compiled base path}
+      TOKEN_ENCRYPTION_KEY_FILE: /run/secrets/openmuse_encryption_key
+    expose: ["8787"]
+    # Host nginx is the canonical public ingress. Bind only loopback; never 0.0.0.0.
+    ports:
+      - "127.0.0.1:28787:8787"
+    volumes:
+      - openmuse-data:/data
+    tmpfs:
+      - /tmp:size=128m,mode=1777
+    secrets:
+      - openmuse_encryption_key
+    networks:
+      - rhodiz
+volumes:
+  openmuse-data:
+secrets:
+  openmuse_encryption_key:
+    file: ${OPENMUSE_ENCRYPTION_KEY_FILE:?Provide an approved runtime secret file readable by UID 1000}
+networks:
+  rhodiz:
+    external: true
+    name: ${RHODIZ_NETWORK:?Provide the existing approved RHODIZ network}

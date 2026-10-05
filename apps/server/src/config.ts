@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 
 if (existsSync(".env")) process.loadEnvFile(".env");
@@ -7,6 +7,8 @@ process.env.COPILOTKIT_TELEMETRY_DISABLED ??= "true";
 
 export interface Config {
   mode: "sample" | "live";
+  deployment?: "rhodiz";
+  webDir?: string;
   port: number;
   host: string;
   publicUrl: string;
@@ -44,6 +46,7 @@ export function shouldStartLocalTaskWorker(config: Config): boolean {
 }
 
 export function assertApiDeploymentConfig(config: Config): void {
+  assertRhodizDeployment(config);
   if (
     config.mode === "live" &&
     config.authBackend !== "rhodiz" &&
@@ -53,50 +56,116 @@ export function assertApiDeploymentConfig(config: Config): void {
   }
 }
 
-export function readConfig(): Config {
-  const mode = process.env.WORKSPACE_MODE ?? "sample";
+function encryptionKey(env: NodeJS.ProcessEnv): string | undefined {
+  const value = env.TOKEN_ENCRYPTION_KEY;
+  const file = env.TOKEN_ENCRYPTION_KEY_FILE;
+  if (file === undefined) return value;
+  if (value !== undefined)
+    throw new Error("Set TOKEN_ENCRYPTION_KEY or TOKEN_ENCRYPTION_KEY_FILE, not both");
+  let key: string;
+  try {
+    const info = statSync(file);
+    if (!info.isFile() || info.size > 256) throw new Error("Invalid secret file");
+    key = readFileSync(file, "utf8").trim();
+  } catch {
+    throw new Error("TOKEN_ENCRYPTION_KEY_FILE could not be read as a small regular file");
+  }
+  if (!key) throw new Error("TOKEN_ENCRYPTION_KEY_FILE must not be empty");
+  return key;
+}
+
+export function assertRhodizDeployment(config: Config): void {
+  if (config.deployment !== "rhodiz") return;
+  if (config.mode !== "live" || config.authBackend !== "rhodiz" || config.agentBackend !== "agui")
+    throw new Error("RHODIZ deployment requires live mode, RHODIZ auth and the AG-UI bridge");
+  if (
+    config.taskWorkerEnabled !== false ||
+    config.computerEnabled ||
+    config.workerUrl ||
+    config.workerToken ||
+    config.agentToken ||
+    config.intelligenceApiKey
+  )
+    throw new Error(
+      "RHODIZ deployment cannot configure a local worker, Computer or alternate agent authority",
+    );
+  if (!config.webDir) throw new Error("RHODIZ deployment requires OPENMUSE_WEB_DIR");
+  const key = config.encryptionKey ?? "";
+  if (
+    Buffer.from(key, "base64").length !== 32 ||
+    Buffer.from(key, "base64").toString("base64") !== key
+  )
+    throw new Error("RHODIZ deployment requires a canonical 32-byte base64 encryption key");
+  for (const value of [config.publicUrl, config.rhodizApiUrl, config.agentUrl]) {
+    if (!value)
+      throw new Error("RHODIZ deployment requires explicit public and canonical API URLs");
+    const url = new URL(value);
+    if (
+      !["http:", "https:"].includes(url.protocol) ||
+      url.username ||
+      url.password ||
+      url.search ||
+      url.hash
+    )
+      throw new Error(
+        "RHODIZ deployment URLs must be HTTP(S), without credentials, queries or fragments",
+      );
+  }
+  if (config.agentUrl !== `${config.rhodizApiUrl}/api/rhodiz/openmuse/agui`)
+    throw new Error("AGENT_URL must use the canonical RHODIZ OpenMuse AG-UI endpoint");
+}
+
+export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
+  const deployment = env.OPENMUSE_DEPLOYMENT;
+  if (deployment !== undefined && deployment !== "rhodiz")
+    throw new Error("OPENMUSE_DEPLOYMENT must be rhodiz when specified");
+  const mode = env.WORKSPACE_MODE ?? "sample";
   if (mode !== "sample" && mode !== "live")
     throw new Error("WORKSPACE_MODE must be sample or live");
-  const backend = process.env.AGENT_BACKEND ?? (mode === "sample" ? "sample" : "model");
+  const backend = env.AGENT_BACKEND ?? (mode === "sample" ? "sample" : "model");
   if (backend !== "sample" && backend !== "model" && backend !== "agui")
     throw new Error("AGENT_BACKEND must be sample, model or agui");
-  const authBackend = process.env.AUTH_BACKEND ?? "local";
+  const authBackend = env.AUTH_BACKEND ?? "local";
   if (authBackend !== "local" && authBackend !== "rhodiz")
     throw new Error("AUTH_BACKEND must be local or rhodiz");
   if (mode === "live" && backend === "sample")
     throw new Error("Live workspaces cannot use the sample agent");
   if (authBackend === "rhodiz" && backend !== "agui")
     throw new Error("AUTH_BACKEND=rhodiz requires AGENT_BACKEND=agui");
-  const port = Number(process.env.PORT ?? 8787);
-  const publicUrl = process.env.PUBLIC_API_URL ?? `http://localhost:${port}`;
+  const port = Number(env.PORT ?? 8787);
+  if (deployment === "rhodiz" && env.PUBLIC_API_URL === undefined)
+    throw new Error("RHODIZ deployment requires PUBLIC_API_URL");
+  const publicUrl = env.PUBLIC_API_URL ?? `http://localhost:${port}`;
   const config: Config = {
     mode,
+    deployment,
+    webDir: env.OPENMUSE_WEB_DIR ? resolve(env.OPENMUSE_WEB_DIR) : undefined,
     port,
-    host: process.env.HOST ?? "127.0.0.1",
+    host: env.HOST ?? "127.0.0.1",
     publicUrl,
-    dataDir: resolve(process.env.DATA_DIR ?? ".openmuse"),
-    databaseUrl: process.env.DATABASE_URL,
-    accessKey: process.env.OPENMUSE_ACCESS_KEY,
-    encryptionKey: process.env.TOKEN_ENCRYPTION_KEY,
-    model: process.env.MODEL,
+    dataDir: resolve(env.DATA_DIR ?? ".openmuse"),
+    databaseUrl: env.DATABASE_URL,
+    accessKey: env.OPENMUSE_ACCESS_KEY,
+    encryptionKey: encryptionKey(env),
+    model: env.MODEL,
     agentBackend: backend,
     authBackend,
-    rhodizApiUrl: process.env.RHODIZ_API_URL?.replace(/\/$/, ""),
-    agentUrl: process.env.AGENT_URL,
-    agentToken: process.env.AGENT_TOKEN,
-    intelligenceApiKey: process.env.CPK_INTELLIGENCE_API_KEY,
-    googleClientId: process.env.GOOGLE_CLIENT_ID,
-    googleClientSecret: process.env.GOOGLE_CLIENT_SECRET,
+    rhodizApiUrl: env.RHODIZ_API_URL?.replace(/\/$/, ""),
+    agentUrl: env.AGENT_URL,
+    agentToken: env.AGENT_TOKEN,
+    intelligenceApiKey: env.CPK_INTELLIGENCE_API_KEY,
+    googleClientId: env.GOOGLE_CLIENT_ID,
+    googleClientSecret: env.GOOGLE_CLIENT_SECRET,
     googleRedirectUri: `${publicUrl}/api/google/callback`,
-    workerUrl: process.env.BROWSER_WORKER_URL,
-    workerToken: process.env.WORKER_TOKEN,
-    taskWorkerEnabled: process.env.TASK_WORKER_ENABLED !== "false",
-    computerEnabled: process.env.COMPUTER_ENABLED === "true",
-    computerImage: process.env.COMPUTER_IMAGE ?? "openmuse-computer:local",
-    computerDeploymentId: process.env.COMPUTER_DEPLOYMENT_ID,
-    allowedOrigins: (
-      process.env.ALLOWED_ORIGINS ?? "http://localhost:8081,http://127.0.0.1:8081"
-    ).split(","),
+    workerUrl: env.BROWSER_WORKER_URL,
+    workerToken: env.WORKER_TOKEN,
+    taskWorkerEnabled: env.TASK_WORKER_ENABLED !== "false",
+    computerEnabled: env.COMPUTER_ENABLED === "true",
+    computerImage: env.COMPUTER_IMAGE ?? "openmuse-computer:local",
+    computerDeploymentId: env.COMPUTER_DEPLOYMENT_ID,
+    allowedOrigins: (env.ALLOWED_ORIGINS ?? "http://localhost:8081,http://127.0.0.1:8081").split(
+      ",",
+    ),
   };
   if (authBackend === "rhodiz" && !config.rhodizApiUrl)
     throw new Error("AUTH_BACKEND=rhodiz requires RHODIZ_API_URL");
@@ -112,5 +181,6 @@ export function readConfig(): Config {
     throw new Error("Local live mode requires OPENMUSE_ACCESS_KEY (24+ characters)");
   if (mode === "sample" && !["127.0.0.1", "localhost", "::1"].includes(config.host))
     throw new Error("Sample workspace is local-only. HOST must be a loopback address.");
+  assertRhodizDeployment(config);
   return config;
 }

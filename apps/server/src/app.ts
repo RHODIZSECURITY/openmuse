@@ -28,6 +28,8 @@ import {
   rhodizBrowserSessions,
   rhodizBrowserState,
 } from "./rhodiz-browser.ts";
+import { rhodizPcState } from "./rhodiz-pc.ts";
+import { createWebMiddleware } from "./web.ts";
 import { WorkspaceService } from "./workspace.ts";
 
 export async function createApp(
@@ -57,11 +59,16 @@ export async function createApp(
   const app = new Hono<{ Variables: { owner: string } }>();
   const origins = new Set([...config.allowedOrigins, new URL(config.publicUrl).origin]);
   app.use("*", async (c, next) => {
+    c.header("X-Content-Type-Options", "nosniff");
+    c.header("X-Frame-Options", "DENY");
+    c.header("Referrer-Policy", "no-referrer");
+    c.header(
+      "Content-Security-Policy",
+      "frame-ancestors 'none'; object-src 'none'; base-uri 'self'",
+    );
+    c.header("Cache-Control", "no-store");
     const origin = c.req.header("origin");
     if (origin && !origins.has(origin)) return c.json({ error: "Origin is not allowed" }, 403);
-    c.header("X-Content-Type-Options", "nosniff");
-    c.header("Referrer-Policy", "no-referrer");
-    c.header("Cache-Control", "no-store");
     await next();
   });
   app.use(
@@ -166,11 +173,16 @@ export async function createApp(
     const snapshot = await workspace.snapshot(c.get("owner"), c.req.query("q"));
     if (config.authBackend === "rhodiz") {
       const authorization = c.req.header("authorization");
-      const state = await rhodizBrowserState(config, authorization);
+      const [state, pcState] = await Promise.all([
+        rhodizBrowserState(config, authorization),
+        rhodizPcState(config, authorization),
+      ]);
       snapshot.browsers =
         state === "connected" ? await rhodizBrowserSessions(config, authorization) : [];
       snapshot.runtime.browserBackend = "rhodiz";
       snapshot.runtime.browserStatus = state;
+      snapshot.runtime.computerBackend = "rhodiz";
+      snapshot.runtime.computerStatus = pcState;
       const connection = snapshot.connections.find((item) => item.id === "browser");
       if (connection) {
         connection.status =
@@ -508,8 +520,19 @@ export async function createApp(
     );
     return new Response(body, { status: response.status, headers: response.headers });
   });
-  app.get("/", (c) =>
-    c.json({ name: "OpenMuse", app: "http://localhost:8081", health: "/api/health" }),
-  );
+  if (config.webDir) {
+    app.use(
+      "*",
+      await createWebMiddleware(
+        config.webDir,
+        config.dataDir,
+        config.deployment === "rhodiz" ? config.publicUrl : undefined,
+      ),
+    );
+  } else {
+    app.get("/", (c) =>
+      c.json({ name: "OpenMuse", app: "http://localhost:8081", health: "/api/health" }),
+    );
+  }
   return { app, auth, files, actions, workspace, agent, computer };
 }

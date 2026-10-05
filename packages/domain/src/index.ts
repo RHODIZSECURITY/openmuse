@@ -187,6 +187,8 @@ export interface Workspace {
     conversationStore?: "local" | "intelligence" | "rhodiz";
     browserBackend?: "openmuse" | "rhodiz";
     browserStatus?: "connected" | "offline" | "disabled" | "forbidden";
+    computerBackend?: "openmuse" | "rhodiz";
+    computerStatus?: "connected" | "offline" | "disabled" | "forbidden";
   };
 }
 

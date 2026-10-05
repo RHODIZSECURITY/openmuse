@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { mkdtemp, rm, stat } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import test, { type TestContext } from "node:test";
 import { aguiHeaders } from "../apps/server/src/agent.ts";
 import { createApp } from "../apps/server/src/app.ts";
-import { Auth } from "../apps/server/src/auth.ts";
+import { Auth, createAuth } from "../apps/server/src/auth.ts";
 import type { Config } from "../apps/server/src/config.ts";
 import { createStore, type Store } from "../apps/server/src/db.ts";
 
@@ -11,7 +14,8 @@ const base: Config = {
   port: 8787,
   host: "127.0.0.1",
   publicUrl: "http://localhost:8787",
-  dataDir: "/tmp/openmuse-rhodiz-auth-test",
+  // Constructor-only tests do not access disk; app tests use isolatedConfig below.
+  dataDir: "unused-direct-auth-fixture",
   agentBackend: "agui",
   authBackend: "rhodiz",
   rhodizApiUrl: "http://rhodiz.internal",
@@ -19,6 +23,12 @@ const base: Config = {
   googleRedirectUri: "http://localhost:8787/api/google/callback",
   allowedOrigins: [],
 };
+
+async function isolatedConfig(t: TestContext): Promise<Config> {
+  const dataDir = await mkdtemp(join(tmpdir(), "openmuse-rhodiz-auth-"));
+  t.after(() => rm(dataDir, { recursive: true, force: true }));
+  return { ...base, dataDir };
+}
 
 const unusedStore = new Proxy(
   {},
@@ -97,6 +107,7 @@ test("AG-UI forwards the verified RHODIZ bearer and ignores a static agent token
 });
 
 test("RHODIZ conversation history stays canonical and local conversation writes are disabled", async (t) => {
+  const config = await isolatedConfig(t);
   const db = await createStore();
   try {
     const calls: string[] = [];
@@ -134,11 +145,25 @@ test("RHODIZ conversation history stays canonical and local conversation writes 
         assert.equal(requestHeaders.get("authorization"), null);
         return Response.json({ sessions: [] });
       }
+      if (url === "http://rhodiz.internal/api/rhodiz/pc") {
+        const requestHeaders = new Headers(init?.headers);
+        assert.equal(requestHeaders.get("x-rhodiz-token"), "canonical-bearer");
+        assert.equal(requestHeaders.get("authorization"), null);
+        return Response.json({
+          enabled: true,
+          provider: "rhodiz",
+          protocolVersion: 1,
+          openmuseBridgeReady: true,
+          status: "stopped",
+          workspacePath: "/workspace",
+          network: "disabled",
+        });
+      }
       throw new Error(`unexpected fetch: ${url}`);
     });
 
     const server = await createApp(db, {
-      ...base,
+      ...config,
       intelligenceApiKey: "configured-but-must-not-own-history",
       workerUrl: "http://openmuse-worker.invalid",
       workerToken: "must-never-be-used-in-rhodiz-mode",
@@ -184,6 +209,12 @@ test("RHODIZ conversation history stays canonical and local conversation writes 
     assert.equal(snapshot.runtime.conversationStore, "rhodiz");
     assert.equal(snapshot.runtime.browserBackend, "rhodiz");
     assert.equal(snapshot.runtime.browserStatus, "connected");
+    assert.equal(snapshot.runtime.computerBackend, "rhodiz");
+    assert.equal(
+      snapshot.runtime.computerStatus,
+      "connected",
+      "a stopped workbench still has a connected RHODIZ PC bridge",
+    );
     assert.deepEqual(snapshot.browsers, []);
     const browserConnection = snapshot.connections.find(
       (connection: { id: string }) => connection.id === "browser",
@@ -213,6 +244,7 @@ test("RHODIZ conversation history stays canonical and local conversation writes 
       calls.includes("http://rhodiz.internal/api/rhodiz/openmuse/conversation?threadId=local-main"),
     );
     assert.ok(calls.includes("http://rhodiz.internal/api/rhodiz/computer/estado"));
+    assert.ok(calls.includes("http://rhodiz.internal/api/rhodiz/pc"));
     assert.ok(!calls.some((url) => url.startsWith("http://openmuse-worker.invalid")));
   } finally {
     await db.close();
@@ -220,6 +252,7 @@ test("RHODIZ conversation history stays canonical and local conversation writes 
 });
 
 test("RHODIZ history proxy rejects a response without the canonical marker", async (t) => {
+  const config = await isolatedConfig(t);
   const db = await createStore();
   try {
     t.mock.method(globalThis, "fetch", async (input: RequestInfo | URL) => {
@@ -239,12 +272,22 @@ test("RHODIZ history proxy rejects a response without the canonical marker", asy
       throw new Error(`unexpected fetch: ${url}`);
     });
 
-    const server = await createApp(db, base);
+    const server = await createApp(db, config);
     const response = await server.app.request("/api/conversation", {
       headers: { Authorization: "Bearer canonical-bearer" },
     });
     assert.equal(response.status, 422);
   } finally {
     await db.close();
+  }
+});
+
+test("RHODIZ app fixtures isolate concurrent signing-key creation", async (t) => {
+  const [first, second] = await Promise.all([isolatedConfig(t), isolatedConfig(t)]);
+  assert.notEqual(first.dataDir, second.dataDir);
+  await Promise.all([createAuth(unusedStore, first), createAuth(unusedStore, second)]);
+  for (const config of [first, second]) {
+    assert.equal((await stat(config.dataDir)).mode & 0o777, 0o700);
+    assert.equal((await stat(join(config.dataDir, "session-signing-key"))).mode & 0o777, 0o600);
   }
 });

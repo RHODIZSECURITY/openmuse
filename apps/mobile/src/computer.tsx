@@ -13,6 +13,7 @@ import type { BrowserSession } from "../../../packages/domain/src";
 import { browserAddress } from "./browser-address";
 import { useComputerDraft } from "./computer-drafts";
 import { LinuxWorkspace } from "./computer-workspace";
+import { isRhodizPc, rhodizPcTabs, rhodizPcWorkspaceConnected } from "./rhodiz-pc";
 import { Button, Card, colors, ErrorNotice, Field, LinkRow, Sheet, s } from "./ui";
 import { useWorkspace } from "./workspace";
 
@@ -22,11 +23,12 @@ export function ComputerEntry() {
     (c) => c.id === "browser" && c.status === "connected",
   );
   const sovereign = workspace.runtime.browserBackend === "rhodiz";
+  const rhodizPc = isRhodizPc(workspace.runtime);
   const active = workspace.browsers.filter((b) => b.status === "active").length;
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel="Agent computer — take control"
+      accessibilityLabel={rhodizPc ? "RHODIZ PC — take control" : "Agent computer — take control"}
       onPress={() => open({ type: "computer" })}
       style={[
         s.row,
@@ -42,7 +44,7 @@ export function ComputerEntry() {
     >
       <Monitor size={13} color={colors.muted} />
       <Text style={{ fontSize: 12, color: colors.muted }}>
-        Computer
+        {rhodizPc ? "RHODIZ PC" : "Computer"}
         {sovereign
           ? available
             ? " · RHODIZ online"
@@ -140,7 +142,9 @@ export function ComputerSheet() {
   );
   const sovereign = workspace.runtime.browserBackend === "rhodiz";
   const browserStatus = workspace.runtime.browserStatus;
-  const effectiveTab = sovereign ? "Browser" : tab;
+  const rhodizPc = isRhodizPc(workspace.runtime);
+  const pcWorkspaceConnected = rhodizPcWorkspaceConnected(workspace.runtime);
+  const effectiveTab = rhodizPc && !pcWorkspaceConnected ? "Browser" : tab;
   useEffect(() => {
     let active = true;
     const timer = setInterval(() => {
@@ -173,8 +177,12 @@ export function ComputerSheet() {
   }
   return (
     <Sheet
-      title="Agent computer"
-      subtitle="Your agent works here. Step in whenever you need."
+      title={rhodizPc ? "RHODIZ PC" : "Agent computer"}
+      subtitle={
+        rhodizPc
+          ? "RHODIZ’s governed PC workspace and tools."
+          : "Your agent works here. Step in whenever you need."
+      }
       onClose={close}
     >
       <View style={{ gap: 20 }}>
@@ -200,10 +208,10 @@ export function ComputerSheet() {
                   ? available
                     ? "The canonical RHODIZ browser is healthy. Navigation is gated by one-shot RHODIZ Action Fabric confirmation tickets."
                     : browserStatus === "forbidden"
-                      ? "This RHODIZ account is not authorized for Computer-use."
+                      ? "This RHODIZ account is not authorized for the RHODIZ PC browser."
                       : browserStatus === "disabled"
-                        ? "Enable RHODIZ Computer-use from its canonical Admin configuration."
-                        : "RHODIZ Computer-use is configured but its browser sidecar is unavailable."
+                        ? "Enable the RHODIZ PC browser from its canonical Admin configuration."
+                        : "The RHODIZ PC browser is configured but its sidecar is unavailable."
                   : available
                     ? "Your agent’s browser and documents, in one place."
                     : "Start the browser worker to connect this computer."}
@@ -212,18 +220,16 @@ export function ComputerSheet() {
           </View>
         )}
         <View style={[s.row, { gap: 8 }]}>
-          {(sovereign ? (["Browser"] as const) : (["Browser", "Terminal", "Files"] as const)).map(
-            (item) => (
-              <Button
-                key={item}
-                primary={tab === item}
-                icon={item === "Browser" ? Globe2 : item === "Terminal" ? Terminal : FolderOpen}
-                onPress={() => setTab(item)}
-              >
-                {item}
-              </Button>
-            ),
-          )}
+          {rhodizPcTabs(workspace.runtime).map((item) => (
+            <Button
+              key={item}
+              primary={tab === item}
+              icon={item === "Browser" ? Globe2 : item === "Terminal" ? Terminal : FolderOpen}
+              onPress={() => setTab(item)}
+            >
+              {item}
+            </Button>
+          ))}
         </View>
         <View style={{ display: effectiveTab === "Browser" ? "none" : "flex" }}>
           <LinuxWorkspace tab={effectiveTab === "Files" ? "Files" : "Terminal"} />
@@ -301,7 +307,7 @@ export function ComputerSheet() {
               .catch((e) => setError(String(e)))
           }
         >
-          Refresh computer
+          {rhodizPc ? "Refresh RHODIZ PC" : "Refresh computer"}
         </Button>
       </View>
     </Sheet>
