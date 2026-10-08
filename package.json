@@ -52,6 +52,8 @@
     "@copilotkit/core": "1.70.1",
     "@types/node": "^24.0.0",
     "@types/pg": "^8.15.5",
+    "braces": "file:vendor/braces",
+    "node-forge": "file:vendor/node-forge",
     "tsx": "^4.20.0",
     "typescript": "~5.9.2"
   }
